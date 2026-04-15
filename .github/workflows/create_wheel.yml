@@ -85,7 +85,7 @@ jobs:
           perl -i -pe 's/__version__ = "(\d+)\.(\d+)\.(\d+)"/"__version__ = \"$1.$2.".($3+1).".dev1\""/e' paynt/_version.py
           perl -i -pe 's/__version__ = "(\d+)\.(\d+)\.(\d+)"/"__version__ = \"$1.$2.".($3+1).".dev1\""/e' payntbind/lib/payntbind/_version.py
       - name: Build wheels
-        uses: pypa/cibuildwheel@v3.4.0
+        uses: pypa/cibuildwheel@v3.4.1
         if: env.NIGHTLY_BUILD == 'true'
         env:
           CIBW_PLATFORM: ${{ matrix.platform }}
@@ -131,7 +131,7 @@ jobs:
             python -c "import stormpy; print('stormpy from:', stormpy.__file__)"
             python -m pip install scikit-build-core pybind11
       - name: Build wheels (non-nightly)
-        uses: pypa/cibuildwheel@v3.4.0
+        uses: pypa/cibuildwheel@v3.4.1
         if: env.NIGHTLY_BUILD != 'true'
         env:
           CIBW_PLATFORM: ${{ matrix.platform }}
