@@ -43,7 +43,7 @@ jobs:
           echo "STORMPY_ARTIFACT_NAME=stormpy-wheels-linux-intel" >> $GITHUB_ENV
       - name: Download stormpy nightly wheel if NIGHTLY_BUILD
         if: env.NIGHTLY_BUILD == 'true'
-        uses: dawidd6/action-download-artifact@v20
+        uses: dawidd6/action-download-artifact@v21
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: create_wheel_scheduled.yml
