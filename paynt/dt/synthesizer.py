@@ -171,7 +171,7 @@ class DtSynthesizer(paynt.synthesizer.synthesizer_ar.SynthesizerAR):
         logger.info(f"exported decision tree string to {tree_string_filename}")
 
 
-    def synthesize_tree(self, depth : int):
+    def synthesize_tree(self, depth : int, family=None):
         self.counters_reset()
         self.quotient.reset_tree(depth)
         self.best_assignment = self.best_assignment_value = None
@@ -183,13 +183,21 @@ class DtSynthesizer(paynt.synthesizer.synthesizer_ar.SynthesizerAR):
         self.best_assignment = self.best_assignment_value = None
         self.counters_print()
 
-    def synthesize_tree_sequence(self, opt_result_value):
+    def synthesize_tree_sequence(self, opt_result_value, overall_timeout=None, max_depth=None, break_if_found=False):
         self.best_tree = self.best_tree_value = None
 
-        global_timeout = paynt.utils.timer.GlobalTimer.global_timer.time_limit_seconds
-        if global_timeout is None: global_timeout = 900
-        depth_timeout = global_timeout / 2 / DtSynthesizer.tree_depth
-        for depth in range(DtSynthesizer.tree_depth+1):
+        if max_depth is None:
+            max_depth = DtSynthesizer.tree_depth+1
+        if overall_timeout is None:
+            global_timeout = paynt.utils.timer.GlobalTimer.global_timer.time_limit_seconds
+            if global_timeout is None: global_timeout = 900 # TODO this should probably not be the deafult behaviour, we want to run the synthesis indefinitely if the user does not give us timeout
+            overall_timeout = global_timeout
+            tree_sequence_timer = None
+        else:
+            tree_sequence_timer = paynt.utils.timer.Timer(overall_timeout)
+            tree_sequence_timer.start()
+        depth_timeout = overall_timeout / 2 / (max_depth-1) if max_depth > 1 else overall_timeout
+        for depth in range(max_depth):
             print()
             self.quotient.reset_tree(depth)
             best_assignment_old = self.best_assignment
@@ -199,7 +207,7 @@ class DtSynthesizer(paynt.synthesizer.synthesizer_ar.SynthesizerAR):
             self.counters_reset()
             self.stat = paynt.synthesizer.statistic.Statistic(self)
             self.stat.start(family)
-            timeout = depth_timeout if depth < DtSynthesizer.tree_depth else None
+            timeout = depth_timeout if depth < max_depth-1 else overall_timeout / 2 # second half of the time for the last depth
             self.synthesis_timer = paynt.utils.timer.Timer(timeout)
             self.synthesis_timer.start()
             families = [family]
@@ -230,10 +238,10 @@ class DtSynthesizer(paynt.synthesizer.synthesizer_ar.SynthesizerAR):
                 self.best_tree.root.associate_assignment(self.best_assignment)
                 self.best_tree_value = self.best_assignment_value
 
-                if abs( (self.best_assignment_value-opt_result_value)/opt_result_value ) < 1e-3:
+                if break_if_found or (opt_result_value != 0 and abs( (self.best_assignment_value-opt_result_value)/opt_result_value ) < 1e-3) or (opt_result_value == 0 and self.best_assignment_value < 1e-3):
                     break
 
-            if self.resource_limit_reached():
+            if self.resource_limit_reached() or tree_sequence_timer is not None and tree_sequence_timer.time_limit_reached():
                 break
 
     def map_scheduler(self, scheduler_choices, tree_depth=None):

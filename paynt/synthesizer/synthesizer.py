@@ -38,6 +38,7 @@ class Synthesizer:
         import paynt.synthesizer.policy_tree
 
         from paynt.dt import DtColoredMdpFactory, DtSynthesizer
+        from paynt.dt.dtnest import DtNest
 
         if isinstance(quotient, paynt.quotient.pomdp_family.PomdpFamilyQuotient):
             logger.info("nothing to do with the POMDP sketch, aborting...")

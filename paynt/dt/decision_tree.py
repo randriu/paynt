@@ -78,16 +78,45 @@ class DecisionTreeNode:
         if self.is_terminal:
             return 0
         return 1 + max([child.get_depth() for child in self.child_nodes])
+    
+    def set_node_from_helper(self, tree_helper_node, variable_names, variable_domains, action_labels):
+        if tree_helper_node["leaf"]:
+            self.action = action_labels.index(tree_helper_node["chosen"][0])
+        else:
+            self.variable = variable_names.index(tree_helper_node["chosen"][0])
+            # dtControl uses values that are not necessarily in the domain, e.g. let's say our domain is [0,2,3]
+            # and we want to split [0] and [2,3], dtControl can choose 0.5 or 1.5. We expect it will be 0 in this case.
+            # Note that dtControl bound decisions are floored when creating the tree helper i.e. 1.5 becomes 1
+            while tree_helper_node["chosen"][1] not in variable_domains[self.variable]:
+                tree_helper_node["chosen"] = (tree_helper_node["chosen"][0], tree_helper_node["chosen"][1]-1)
+            self.variable_bound = variable_domains[self.variable].index(tree_helper_node["chosen"][1])
 
-    def assign_identifiers(self, identifier : int = 0) -> int:
+    def add_children_from_helper(self, tree_helper, helper_node, variable_names, variable_domains, action_labels):
+        assert self.is_terminal
+        self.child_true = DecisionTreeNode(self)
+        true_child_helper = tree_helper[helper_node["children"][0]]
+        self.child_true.set_node_from_helper(true_child_helper, variable_names, variable_domains, action_labels)
+        self.child_false = DecisionTreeNode(self)
+        false_child_helper = tree_helper[helper_node["children"][1]]
+        self.child_false.set_node_from_helper(false_child_helper, variable_names, variable_domains, action_labels)
+
+    def get_number_of_descendants(self) -> int:
+        if self.is_terminal:
+            return 0
+        return 1 + sum([child.get_number_of_descendants() for child in self.child_nodes])
+
+    def assign_identifiers(self, identifier : int = 0, keep_old : bool = False) -> int:
         '''
         Recursively assigns unique identifiers to each child node with pre-order traversal.
+            If keep_old is True, the old identifier is stored in the old_identifier attribute before being overwritten.
         '''
+        if keep_old:
+            self.old_identifier = self.identifier
         self.identifier = identifier
         if self.is_terminal:
             return self.identifier
-        identifier = self.child_true.assign_identifiers(identifier+1)
-        identifier = self.child_false.assign_identifiers(identifier+1)
+        identifier = self.child_true.assign_identifiers(identifier+1, keep_old=keep_old)
+        identifier = self.child_false.assign_identifiers(identifier+1, keep_old=keep_old)
         return identifier
 
     def associate_parameters(self, node_parameter_info : list[tuple[int,str,str]]):
@@ -161,6 +190,19 @@ class DecisionTreeNode:
         if self.parent is None:
             return []
         return self.parent.path_expression(variables) + [self.parent.branch_expression(variables,true_branch=self.is_true_child)]
+    
+    def copy(self, parent):
+        node_copy = DecisionTreeNode(parent)
+        node_copy.identifier = self.identifier
+        node_copy.parameters = self.parameters
+        if self.is_terminal:
+            node_copy.action = self.action
+        else:
+            node_copy.variable = self.variable
+            node_copy.variable_bound = self.variable_bound
+            node_copy.child_true = self.child_true.copy(node_copy)
+            node_copy.child_false = self.child_false.copy(node_copy)
+        return node_copy
 
     def to_string(self, variables : list["DtVariable"], action_labels : list[str], indent_level : int = 0, indent_size : int = 2) -> str:
         indent = " "*indent_level*indent_size
@@ -177,10 +219,10 @@ class DecisionTreeNode:
     def graphviz_id(self) -> str:
         return str(self.identifier)
 
-    def to_graphviz(self, graphviz_tree : graphviz.Digraph, variables : list["DtVariable"], action_labels : list[str]):
+    def to_graphviz(self, graphviz_tree : graphviz.Digraph, variables : list["DtVariable"], action_labels : list[str], highlight_nodes : list[int] = []):
         if not self.is_terminal:
             for child in self.child_nodes:
-                child.to_graphviz(graphviz_tree,variables,action_labels)
+                child.to_graphviz(graphviz_tree,variables,action_labels,highlight_nodes)
 
         if self.is_terminal:
             node_label = action_labels[self.action]
@@ -188,10 +230,35 @@ class DecisionTreeNode:
             var = variables[self.variable]
             node_label = f"{var.name}<={var.domain[self.variable_bound]}"
 
-        graphviz_tree.node(self.graphviz_id, label=node_label, shape="box", style="rounded", margin="0.05,0.05")
+        if self.identifier in highlight_nodes:
+            graphviz_tree.node(self.graphviz_id, label=node_label, shape="box", style="filled", fillcolor="lightgreen", margin="0.05,0.05")
+        else:
+            graphviz_tree.node(self.graphviz_id, label=node_label, shape="box", style="rounded", margin="0.05,0.05")
         if not self.is_terminal:
             graphviz_tree.edge(self.graphviz_id,self.child_true.graphviz_id,label="T")
             graphviz_tree.edge(self.graphviz_id,self.child_false.graphviz_id,label="F")
+        
+    
+    # in dtNest the tree nodes contain reference indeces to objects from subtree_quotient
+    # this needs to be fixed to match the references in the original quotient
+    def fix_with_respect_to_quotient(self, action_labels, new_action_labels, variables, new_variables):
+        if self.is_terminal:
+            old_index = self.action
+            self.action = new_action_labels.index(action_labels[old_index])
+            return
+        
+        var = variables[self.variable]
+        var_name = var.name
+        var_bound = var.domain[self.variable_bound]
+        for var_id, new_var in enumerate(new_variables):
+            if new_var.name == var_name:
+                break
+        bound_id = new_var.domain.index(var_bound)
+        self.variable = var_id
+        self.variable_bound = bound_id
+
+        self.child_true.fix_with_respect_to_quotient(action_labels, new_action_labels, variables, new_variables)
+        self.child_false.fix_with_respect_to_quotient(action_labels, new_action_labels, variables, new_variables)
 
 
 
@@ -205,6 +272,15 @@ class DecisionTree:
     def reset(self):
         self.root = DecisionTreeNode(None)
 
+    def random_tree(self):
+        self.root = DecisionTreeNode(None)
+        self.root.action = self.action_labels.index("__random__")
+
+    def copy(self):
+        new_tree = DecisionTree(self.action_labels, self.variables)
+        new_tree.root = self.root.copy(None)
+        return new_tree
+
     def set_depth(self, depth : int):
         self.reset()
         for level in range(depth):
@@ -214,6 +290,28 @@ class DecisionTree:
 
     def get_depth(self) -> int:
         return self.root.get_depth()
+    
+    def build_from_tree_helper(self, tree_helper):
+        self.reset()
+        node_stack = [(0, self.root)]
+        var_names = [v.name for v in self.variables]
+        var_domains = [v.domain for v in self.variables]
+        self.root.set_node_from_helper(tree_helper[0], var_names, var_domains, self.action_labels)
+        while node_stack:
+            node_id, node = node_stack.pop()
+            if tree_helper[node_id]["leaf"]:
+                continue
+            node.add_children_from_helper(tree_helper, tree_helper[node_id], var_names, var_domains, self.action_labels)
+            node_stack.append((tree_helper[node_id]["children"][0], node.child_true))
+            node_stack.append((tree_helper[node_id]["children"][1], node.child_false))
+
+        self.root.assign_identifiers()
+
+        # double check if identifiers correspond to the tree helper
+        nodes = self.collect_nodes()
+        for node_id, node in enumerate(nodes):
+            assert node.is_terminal == tree_helper[node.identifier]["leaf"], f"node {node_id} is terminal: {node.is_terminal}, expected: {tree_helper[node_id]['leaf']}"
+            assert node.identifier == tree_helper[node.identifier]["id"], f"node {node_id} has identifier {node.identifier}, expected: {tree_helper[node_id]['id']}"
 
     def collect_nodes(self, node_condition : Callable[[DecisionTreeNode], bool] | None = None) -> list[DecisionTreeNode]:
         '''
@@ -269,9 +367,24 @@ class DecisionTree:
         s += "endmodule\n"
         return s
 
-    def to_graphviz(self) -> graphviz.Digraph:
+    def to_graphviz(self, highlight_nodes : list[int] = []) -> graphviz.Digraph:
         logging.getLogger("graphviz").setLevel(logging.WARNING)
         logging.getLogger("graphviz.sources").setLevel(logging.ERROR)
         graphviz_tree = graphviz.Digraph(comment="decision tree")
-        self.root.to_graphviz(graphviz_tree,self.variables,self.action_labels)
+        self.root.to_graphviz(graphviz_tree,self.variables,self.action_labels, highlight_nodes)
         return graphviz_tree
+    
+    def append_tree_as_subtree(self, new_subtree, subtree_root_node_id, subtree_quotient):
+        subtree_root_node = self.collect_nodes(lambda node : node.identifier == subtree_root_node_id)
+        assert len(subtree_root_node) == 1, f"subtree root node id {subtree_root_node_id} not found in decision tree"
+        subtree_root_node = subtree_root_node[0]
+
+        all_current_nodes = self.collect_nodes()
+        new_subtree.root.assign_identifiers(identifier=len(all_current_nodes)+1)
+        new_subtree.root.fix_with_respect_to_quotient(subtree_quotient.action_labels, self.action_labels, subtree_quotient.variables, self.variables)
+
+        parent = subtree_root_node.parent
+        if parent.child_true.identifier == subtree_root_node.identifier:
+            parent.child_true = new_subtree.root
+        else:
+            parent.child_false = new_subtree.root
