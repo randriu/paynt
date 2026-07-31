@@ -73,8 +73,9 @@ ALLOW_STORM_FETCH="ON"
 STORM_GIT_REPO="https://github.com/moves-rwth/storm.git"
 STORM_GIT_TAG="master"
 
-[tool.scikit-build.metadata.version]
+[[tool.dynamic-metadata]]
 provider = "scikit_build_core.metadata.regex"
+field = "version"
 input = "paynt/_version.py"
 
 [tool.cibuildwheel]
