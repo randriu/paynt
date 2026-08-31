@@ -7,7 +7,7 @@
 
 void bindings_pomdp_family(py::module& m) {
 
-    py::class_<synthesis::ObservationEvaluator<double>>(m, "ObservationEvaluator")
+    py::classh<synthesis::ObservationEvaluator<double>>(m, "ObservationEvaluator")
         .def(py::init<storm::prism::Program &,storm::models::sparse::Model<double> const& >(), py::arg("prism"), py::arg("model"))
         .def_readonly("num_obs_expressions", &synthesis::ObservationEvaluator<double>::num_obs_expressions)
         .def_readonly("obs_expr_label", &synthesis::ObservationEvaluator<double>::obs_expr_label)
@@ -19,7 +19,7 @@ void bindings_pomdp_family(py::module& m) {
         .def("add_observations_to_submdp", &synthesis::ObservationEvaluator<double>::addObservationsToSubMdp, py::arg("mdp"), py::arg("state_sub_to_full"))
         ;
 
-    py::class_<synthesis::FscUnfolder<double>>(m, "FscUnfolder")
+    py::classh<synthesis::FscUnfolder<double>>(m, "FscUnfolder")
         .def(
             py::init<storm::models::sparse::Model<double> const&,
             std::vector<uint32_t> const&,
@@ -35,7 +35,7 @@ void bindings_pomdp_family(py::module& m) {
         ;
 
     // m.def("randomize_action_variant", &synthesis::randomizeActionVariant<double>);
-    py::class_<synthesis::GameAbstractionSolver<double>>(m, "GameAbstractionSolver")
+    py::classh<synthesis::GameAbstractionSolver<double>>(m, "GameAbstractionSolver")
         .def(
             py::init<
                 storm::models::sparse::Model<double> const&,
@@ -58,7 +58,7 @@ void bindings_pomdp_family(py::module& m) {
         .def("print_profiling", &synthesis::GameAbstractionSolver<double>::printProfiling)
         ;
 
-        py::class_<synthesis::SmgAbstraction<double>, std::shared_ptr<synthesis::SmgAbstraction<double>>>(m, "SmgAbstraction")
+        py::classh<synthesis::SmgAbstraction<double>>(m, "SmgAbstraction")
         .def(py::init<
             storm::models::sparse::Model<double> const&,
             uint64_t,

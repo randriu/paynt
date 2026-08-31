@@ -322,7 +322,7 @@ void bindings_coloring(py::module& m) {
 
     m.def("policyToChoicesForFamily", &synthesis::policyToChoicesForFamily);
 
-    py::class_<synthesis::Family>(m, "Family")
+    py::classh<synthesis::Family>(m, "Family")
         .def(py::init<>())
         .def(py::init<synthesis::Family const&>())
         .def("numHoles", &synthesis::Family::numHoles)
@@ -337,7 +337,7 @@ void bindings_coloring(py::module& m) {
         .def("holeContains", &synthesis::Family::holeContains)
         ;
 
-    py::class_<synthesis::Coloring>(m, "Coloring")
+    py::classh<synthesis::Coloring>(m, "Coloring")
         .def(py::init<
             synthesis::Family const&,
             std::vector<uint64_t> const&,
@@ -349,7 +349,7 @@ void bindings_coloring(py::module& m) {
         .def("collectHoleOptions", &synthesis::Coloring::collectHoleOptions)
         ;
 
-    py::class_<synthesis::ColoringSmt<>, std::shared_ptr<synthesis::ColoringSmt<>>>(m, "ColoringSmt")
+    py::classh<synthesis::ColoringSmt<>>(m, "ColoringSmt")
         .def(py::init<
             std::vector<uint64_t> const&,
             std::vector<uint64_t> const&,

@@ -4,7 +4,7 @@
 
 void bindings_decpomdp(py::module& m) {
 
-    py::class_<synthesis::DecPomdp>(m, "DecPomdp", "dec-POMDP")
+    py::classh<synthesis::DecPomdp>(m, "DecPomdp", "dec-POMDP")
         // .def(py::init<std::string const&>(), "constructor.", py::arg("filename"));
         .def("construct_quotient_mdp", &synthesis::DecPomdp::constructQuotientMdp)
         .def("construct_mdp", &synthesis::DecPomdp::constructMdp)

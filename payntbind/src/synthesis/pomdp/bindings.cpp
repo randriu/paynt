@@ -8,7 +8,7 @@
 template<typename ValueType>
 void bindings_pomdp_vt(py::module& m, std::string const& vtSuffix) {
 
-    py::class_<synthesis::PomdpManager<ValueType>>(m, (vtSuffix + "PomdpManager").c_str(), "POMDP manager")
+    py::classh<synthesis::PomdpManager<ValueType>>(m, (vtSuffix + "PomdpManager").c_str(), "POMDP manager")
         .def(py::init<storm::models::sparse::Pomdp<ValueType> const&>(), "Constructor.", py::arg("pomdp"))
         .def("set_observation_memory_size", &synthesis::PomdpManager<ValueType>::setObservationMemorySize, "Set memory size to a selected observation.", py::arg("observation"), py::arg("memory_size"))
         .def("set_global_memory_size", &synthesis::PomdpManager<ValueType>::setGlobalMemorySize, "Set memory size to all observations.", py::arg("memory_size"))
@@ -30,7 +30,7 @@ void bindings_pomdp_vt(py::module& m, std::string const& vtSuffix) {
         .def_readonly("row_memory_option", &synthesis::PomdpManager<ValueType>::row_memory_option)
         ;
 
-    py::class_<synthesis::PomdpManagerAposteriori<ValueType>>(m, (vtSuffix + "PomdpManagerAposteriori").c_str(), "POMDP manager (a posteriori)")
+    py::classh<synthesis::PomdpManagerAposteriori<ValueType>>(m, (vtSuffix + "PomdpManagerAposteriori").c_str(), "POMDP manager (a posteriori)")
         .def(py::init<storm::models::sparse::Pomdp<ValueType> const&>(), "Constructor.")
         .def("set_observation_memory_size", &synthesis::PomdpManagerAposteriori<ValueType>::setObservationMemorySize)
         .def("set_global_memory_size", &synthesis::PomdpManagerAposteriori<ValueType>::setGlobalMemorySize)

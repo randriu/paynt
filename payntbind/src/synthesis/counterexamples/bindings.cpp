@@ -5,7 +5,7 @@
 
 void bindings_counterexamples(py::module& m) {
 
-    py::class_<synthesis::CounterexampleGenerator<>>(m, "CounterexampleGenerator", "Counterexample generation")
+    py::classh<synthesis::CounterexampleGenerator<>>(m, "CounterexampleGenerator", "Counterexample generation")
         .def(
             py::init<
                 storm::models::sparse::Mdp<double> const&, uint64_t,
@@ -24,7 +24,7 @@ void bindings_counterexamples(py::module& m) {
 
 
     // MDP Counterexample generation
-    py::class_<synthesis::CounterexampleGeneratorMdp<>>(m, "CounterexampleGeneratorMdp", "Counterexample generation")
+    py::classh<synthesis::CounterexampleGeneratorMdp<>>(m, "CounterexampleGeneratorMdp", "Counterexample generation")
         .def(
             py::init<
                 storm::models::sparse::Mdp<double> const&, uint64_t,

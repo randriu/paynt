@@ -7,7 +7,7 @@
 
 template <typename ValueType>
 void bindings_posmg_vt(py::module &m, std::string const& vtSuffix) {
-    py::class_<synthesis::Posmg<ValueType>, std::shared_ptr<synthesis::Posmg<ValueType>>, storm::models::sparse::Smg<ValueType>>(m, ("Posmg" + vtSuffix).c_str())
+    py::classh<synthesis::Posmg<ValueType>, storm::models::sparse::Smg<ValueType>>(m, ("Posmg" + vtSuffix).c_str())
     //    .def(py::init<storm::storage::sparse::ModelComponents<double> const&>(), py::arg("components"))
     //    .def(py::init<storm::storage::sparse::ModelComponents<double> &&>(), py::arg("components"));
         .def(("get_observations" + vtSuffix).c_str(), &synthesis::Posmg<ValueType>::getObservations)
@@ -28,7 +28,7 @@ void bindings_posmg_vt(py::module &m, std::string const& vtSuffix) {
     m.def(("posmg_from_pomdp" + vtSuffix).c_str(), &synthesis::posmgFromPomdp<ValueType>, py::arg("pomdp"), py::arg("state_player_indications"));
     m.def(("posmg_from_smg" + vtSuffix).c_str(), &synthesis::posmgFromSmg<ValueType>, py::arg("smg"), py::arg("observability_classes"));
 
-    py::class_<synthesis::PosmgManager<ValueType>, std::shared_ptr<synthesis::PosmgManager<ValueType>>>(m, ("PosmgManager" + vtSuffix).c_str())
+    py::classh<synthesis::PosmgManager<ValueType>>(m, ("PosmgManager" + vtSuffix).c_str())
         .def(py::init<synthesis::Posmg<ValueType> const&, uint64_t>(), py::arg("posmg"), py::arg("optimizing_player"))
         .def(("construct_mdp" + vtSuffix).c_str(), &synthesis::PosmgManager<ValueType>::constructMdp)
         .def(("get_observation_mapping" + vtSuffix).c_str(), &synthesis::PosmgManager<ValueType>::getObservationMapping)

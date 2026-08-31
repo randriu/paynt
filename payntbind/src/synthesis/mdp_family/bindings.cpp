@@ -6,7 +6,7 @@
 template<typename ValueType>
 void bindings_mdp_family_vt(py::module& m, std::string const& vtSuffix) {
 
-    py::class_<synthesis::MemoryUnfolder<ValueType>>(m, (vtSuffix + "MemoryUnfolder").c_str(), "Memory Unfolder class")
+    py::classh<synthesis::MemoryUnfolder<ValueType>>(m, (vtSuffix + "MemoryUnfolder").c_str(), "Memory Unfolder class")
         .def(py::init<storm::models::sparse::Mdp<ValueType> const&>(), "Constructor.", py::arg("mdp"))
         .def("construct_unfolded_model", &synthesis::MemoryUnfolder<ValueType>::constructUnfoldedModel,
             "Construct an unfolded MDP from a given MDP and memory size.",

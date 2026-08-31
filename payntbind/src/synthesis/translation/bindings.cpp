@@ -526,7 +526,7 @@ void bindings_translation_vt(py::module& m, std::string const& vtSuffix) {
         return result;
     }, py::arg("matrix"), py::arg("rows"), "Get multiple rows from a sparse matrix");
 
-    py::class_<synthesis::SubPomdpBuilder<ValueType>, std::shared_ptr<synthesis::SubPomdpBuilder<ValueType>>>(m, ("SubPomdpBuilder" + vtSuffix).c_str())
+    py::classh<synthesis::SubPomdpBuilder<ValueType>>(m, ("SubPomdpBuilder" + vtSuffix).c_str())
         .def(py::init<storm::models::sparse::Pomdp<ValueType> const&>())
         .def("start_from_belief", &synthesis::SubPomdpBuilder<ValueType>::startFromBelief)
         .def_property_readonly("state_sub_to_full", [](synthesis::SubPomdpBuilder<ValueType>& b) {return b.state_sub_to_full;} )
