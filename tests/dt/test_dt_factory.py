@@ -1,3 +1,5 @@
+import pytest
+
 import paynt.colored_mdp
 import paynt.dt
 import paynt.dt._utils
@@ -18,12 +20,20 @@ class TestDtColoredMdpFactory:
         assert isinstance(dt_colored_mdp_factory, paynt.dt.DtColoredMdpFactory)
         assert not hasattr(dt_colored_mdp_factory, "colored_mdp")
 
-    def test_build_produces_a_tree_at_build_tasks_configured_depth(self, dt_colored_mdp_factory):
-        """Build() must honor build_task.tree_depth, not silently default to 0 -- dt-orchard's fixture goes through DtNestTask (Sketch.load_sketch doesn't yet
-        know whether the caller wants dtnest), whose own default tree_depth is 7, not 0."""
+    @pytest.mark.parametrize("depth", [0, 2])
+    def test_build_produces_a_tree_at_build_tasks_configured_depth(self, dt_colored_mdp_factory, depth):
+        """Build() must honor build_task.tree_depth, not silently default to 0 (dt-orchard's fixture goes through DtNestTask, since Sketch.load_sketch doesn't
+        yet know whether the caller wants dtnest)."""
         assert dt_colored_mdp_factory.build_task is not None
+        dt_colored_mdp_factory.build_task.tree_depth = depth
         colored_mdp = dt_colored_mdp_factory.build()
-        assert colored_mdp.feature_info.decision_tree.get_depth() == dt_colored_mdp_factory.build_task.tree_depth
+        assert colored_mdp.feature_info.decision_tree.get_depth() == depth
+
+    def test_a_sketch_loaded_without_settings_builds_a_tree_of_depth_0(self, dt_colored_mdp_factory):
+        """The default of the library is that of the command line (--tree-depth 0), though the task that Sketch.load_sketch makes is the one of dtnest."""
+        assert dt_colored_mdp_factory.build_task is not None
+        assert dt_colored_mdp_factory.build_task.tree_depth == 0
+        assert dt_colored_mdp_factory.build().feature_info.decision_tree.get_depth() == 0
 
     def test_reset_tree_produces_a_fresh_colored_mdp(self, dt_colored_mdp, dt_colored_mdp_factory):
         reset = dt_colored_mdp_factory.reset_tree(2)

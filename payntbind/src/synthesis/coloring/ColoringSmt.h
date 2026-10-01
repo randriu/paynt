@@ -1,7 +1,7 @@
 #pragma once
 
-#include "src/synthesis/quotient/Family.h"
-#include "src/synthesis/quotient/TreeNode.h"
+#include "src/synthesis/coloring/Family.h"
+#include "src/synthesis/coloring/TreeNode.h"
 
 #include <storm/models/sparse/NondeterministicModel.h>
 #include <storm/storage/BitVector.h>

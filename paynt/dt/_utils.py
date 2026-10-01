@@ -11,6 +11,8 @@ import json
 import paynt.colored_mdp
 import paynt.dt.decision_tree
 import paynt.model.model
+import paynt.task
+import paynt.utils.error_handling
 
 import logging
 
@@ -18,6 +20,9 @@ logger = logging.getLogger(__name__)
 
 # label for action executing a random action selection
 DONT_CARE_ACTION_LABEL = "__random__"
+
+# inner search engines DtSynthesizer can run against each tree unfolding, see make_inner_synthesizer
+DT_INNER_METHODS = ("ar", "smpmc")
 
 
 @dataclass(kw_only=True)
@@ -145,3 +150,21 @@ def get_random_choices(colored_mdp: paynt.colored_mdp.ColoredMdp) -> Any:
             state_to_choice[state] = nci[state]
 
     return paynt.model.model.ModelIndex.state_to_choice_to_choices(underlying_mdp, state_to_choice)
+
+
+def make_inner_synthesizer(method: str, colored_mdp: paynt.colored_mdp.ColoredMdp, task: paynt.task.SynthesisTask) -> Any:
+    """Construct the inner search engine DtSynthesizer runs against one tree unfolding.
+
+    :param method: "ar" (SynthesizerARDt, over ColoringSmt) or "smpmc" (SynthesizerSMPMC, over the tree's ColoringGeneral, see paynt.dt.coloring_general)
+    """
+    paynt.utils.error_handling.require_supported_method(method, DT_INNER_METHODS, "decision-tree synthesis")
+    # hiding imports here to avoid mutual top-level imports (mirroring Synthesizer.for_method)
+    if method == "ar":
+        from paynt.dt.synthesizer_ar_dt import SynthesizerARDt
+
+        return SynthesizerARDt(colored_mdp, task)
+    if method == "smpmc":
+        from paynt.synthesizer.smpmc import SynthesizerSMPMC
+
+        return SynthesizerSMPMC(colored_mdp, task)
+    raise AssertionError(f"DT_INNER_METHODS has a method that make_inner_synthesizer does not build: {method!r}")

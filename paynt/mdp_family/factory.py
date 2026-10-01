@@ -9,6 +9,7 @@ import paynt.mdp_family._utils
 import paynt.mdp_family.task
 import paynt.parameter_space.parameter_space
 import paynt.model.model
+import paynt.utils.error_handling
 
 import logging
 
@@ -66,6 +67,7 @@ class MdpFamilyColoredMdpFactory:
 
         :returns: a new underlying MDP with unfolded scheduler memory
         """
+        paynt.utils.error_handling.require_pair_list_coloring(coloring, "unfolding scheduler memory")
         logger.info(f"unfolding scheduler memory of {self.build_task.memory_size} into the model.")
 
         # unfold the scheduler memory into the model

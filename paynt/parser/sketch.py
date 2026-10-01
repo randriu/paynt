@@ -55,6 +55,7 @@ class Sketch:
         constraint_bound: Any = None,
         use_exact: bool = False,
         task_kwargs: dict[str, Any] | None = None,
+        sound: bool = False,
     ) -> tuple[Any, paynt.task.SynthesisTask]:
 
         # this function's real types are heavily branch-dependent (which of the PRISM/DRN/Cassandra parsers
@@ -70,6 +71,7 @@ class Sketch:
         obs_evaluator: Any = None
 
         paynt.specification.property.Property.model_checking_precision = precision
+        paynt.specification.property.Property.sound = sound
 
         # check path
         if not os.path.isfile(sketch_path):

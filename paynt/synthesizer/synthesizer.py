@@ -9,6 +9,7 @@ import paynt.result
 import paynt.parameter_space.parameter_space
 import paynt.synthesizer.statistic
 import paynt.synthesizer.search_node
+import paynt.utils.error_handling
 import paynt.utils.timer
 
 import logging
@@ -30,12 +31,19 @@ class ParameterSpaceEvaluation:
 class Synthesizer:
     @staticmethod
     def for_method(colored_mdp: paynt.colored_mdp.ColoredMdp, task: paynt.task.SynthesisTask, method: str) -> Synthesizer:
-        """Feature-agnostic dispatch: knows only the generic algorithms, never imports a specific feature package."""
+        """Feature-agnostic dispatch: knows only the generic algorithms, never imports a specific feature package.
+
+        AR and Hybrid are rejected for a colored MDP with a general coloring (see ColoredMdp.has_general_coloring).
+        """
         # hiding imports here to avoid mutual top-level imports
         import paynt.synthesizer.synthesizer_onebyone
         import paynt.synthesizer.synthesizer_ar
         import paynt.synthesizer.synthesizer_cegis
         import paynt.synthesizer.synthesizer_hybrid
+        import paynt.synthesizer.smpmc
+
+        if method in ("ar", "hybrid"):
+            paynt.utils.error_handling.require_pair_list_coloring(colored_mdp.coloring, f"method {method!r}", "use --method onebyone, cegis or smpmc")
 
         if method == "onebyone":
             return paynt.synthesizer.synthesizer_onebyone.SynthesizerOneByOne(colored_mdp, task)
@@ -45,6 +53,8 @@ class Synthesizer:
             return paynt.synthesizer.synthesizer_cegis.SynthesizerCEGIS(colored_mdp, task)
         if method == "hybrid":
             return paynt.synthesizer.synthesizer_hybrid.SynthesizerHybrid(colored_mdp, task)
+        if method == "smpmc":
+            return paynt.synthesizer.smpmc.SynthesizerSMPMC(colored_mdp, task)
         raise ValueError("invalid method name")
 
     search_node_type = paynt.synthesizer.search_node.SearchNode
@@ -68,6 +78,12 @@ class Synthesizer:
             logger.info("time limit reached, aborting...")
             return True
         return False
+
+    def time_remaining(self) -> float | None:
+        """Seconds until time_limit_reached() turns true (negative once it has), or None if there is no time limit."""
+        synthesis_remaining = None if self.synthesis_timer is None else self.synthesis_timer.time_remaining()
+        limits = [remaining for remaining in (synthesis_remaining, paynt.utils.timer.GlobalTimer.time_remaining()) if remaining is not None]
+        return min(limits) if limits else None
 
     def memory_limit_reached(self) -> bool:
         if paynt.utils.timer.GlobalMemoryLimit.limit_reached():
@@ -180,6 +196,11 @@ class Synthesizer:
         if self.best_assignment is not None:
             logger.info("printing synthesized assignment below:")
             logger.info(self.best_assignment)
+        elif optimum_threshold is not None and self.task.specification.optimality is not None:
+            logger.info(
+                f"no assignment improving the given --optimum-threshold {optimum_threshold} was found -- either {optimum_threshold} is already at or "
+                "within model checking precision of the optimum, or no assignment reaches it at all"
+            )
 
         if self.best_assignment is not None and self.best_assignment.size == 1:
             dtmc = self.colored_mdp.build_assignment(self.best_assignment)
@@ -198,5 +219,8 @@ class Synthesizer:
     def run(self, optimum_threshold: Any = None) -> paynt.result.Result:
         assignment = self.synthesize(optimum_threshold=optimum_threshold, keep_optimum=True)
         value = self.best_assignment_value
+        selected_choices = None
+        if assignment is not None and assignment.size == 1:
+            selected_choices = self.colored_mdp.selected_choices(assignment, self.task.specification)
         self._reset_best_assignment()
-        return paynt.result.Result(success=assignment is not None, value=value, assignment=assignment)
+        return paynt.result.Result(success=assignment is not None, value=value, assignment=assignment, selected_choices=selected_choices)

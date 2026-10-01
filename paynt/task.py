@@ -26,6 +26,11 @@ class SynthesisTask:
         conflict_generator_type: str | None = None,
         disable_expected_visits: bool = False,
         discard_unreachable_choices: bool = False,
+        constraint_name: str | None = None,
+        costs_threshold: int | None = None,
+        costs_file_path: str | None = None,
+        forall_pattern: str | None = None,
+        verify_robust: bool = False,
     ):
         self.specification = paynt.specification.property.construct_specification(properties, relative_error, use_exact)
         self.timeout = timeout
@@ -35,6 +40,15 @@ class SynthesisTask:
         self.disable_expected_visits = disable_expected_visits
         # PolicyTreeSynthesizer: if set, unreachable choices are discarded from the splitting scheduler
         self.discard_unreachable_choices = discard_unreachable_choices
+        # shared custom-constraint framework (paynt.parameter_space.constraints), used by SMPMC and CEGIS
+        self.constraint_name = constraint_name
+        # CostsConstraint's threshold and sidecar-file path; unused by every other constraint
+        self.costs_threshold = costs_threshold
+        self.costs_file_path = costs_file_path
+        # ExistsForallConstraint on a non-family sketch: regex over parameter names selecting the forall parameters
+        self.forall_pattern = forall_pattern
+        # SMPMC: independently verify a robust result with AR on the negated specification
+        self.verify_robust = verify_robust
 
     @classmethod
     def from_specification(
@@ -46,6 +60,11 @@ class SynthesisTask:
         conflict_generator_type: str | None = None,
         disable_expected_visits: bool = False,
         discard_unreachable_choices: bool = False,
+        constraint_name: str | None = None,
+        costs_threshold: int | None = None,
+        costs_file_path: str | None = None,
+        forall_pattern: str | None = None,
+        verify_robust: bool = False,
         **kwargs: Any,
     ) -> SynthesisTask:
         """Wrap an already-constructed Specification directly, bypassing property parsing.
@@ -70,6 +89,11 @@ class SynthesisTask:
         task.conflict_generator_type = conflict_generator_type
         task.disable_expected_visits = disable_expected_visits
         task.discard_unreachable_choices = discard_unreachable_choices
+        task.constraint_name = constraint_name
+        task.costs_threshold = costs_threshold
+        task.costs_file_path = costs_file_path
+        task.forall_pattern = forall_pattern
+        task.verify_robust = verify_robust
         return task
 
     def get_property(self) -> paynt.specification.property.Property:

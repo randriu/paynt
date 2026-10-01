@@ -13,6 +13,7 @@ import paynt.parameter_space.parameter_space
 from paynt.mdp_family._utils import MdpFamilyInfo
 import paynt.pomdp.fsc
 import paynt.model.model
+import paynt.utils.error_handling
 
 import logging
 
@@ -60,6 +61,7 @@ def build_pomdp(colored_mdp: paynt.colored_mdp.ColoredMdp, parameter_space: payn
 
 def build_dtmc_sketch(colored_mdp: paynt.colored_mdp.ColoredMdp, fsc: paynt.pomdp.fsc.Fsc | paynt.pomdp.fsc.FscFactored) -> paynt.colored_mdp.ColoredMdp:
     """Construct the family of DTMCs representing the execution of the given FSC in different environments."""
+    paynt.utils.error_handling.require_pair_list_coloring(colored_mdp.coloring, "building the FSC product (build_dtmc_sketch)")
     info = cast(PomdpFamilyInfo, colored_mdp.feature_info)
 
     # create the product

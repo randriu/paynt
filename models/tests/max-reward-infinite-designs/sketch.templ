@@ -1,0 +1,29 @@
+// A walker starts at 0, goes to 1 in one step, and from 1 either leaves to the goal (each step with probability 1/2) or, with EXIT=0, falls into a trap that it
+// never leaves. Every step before the goal costs 1.
+//
+//   EXIT=1: the goal is reached with probability 1, after 1 + 2 steps in expectation: the expected cost is 3.
+//   EXIT=0: the goal is never reached, so the expected cost to reach it is infinite. PAYNT counts such a design as invalid.
+//
+// sketch.props maximizes the expected cost: among the valid designs, the answer is EXIT=1 with 3. lower.props asks for an expected cost of at least 2.5, which
+// EXIT=1 satisfies.
+//
+// The MDP that contains both designs has an infinite maximal expected cost, since it contains EXIT=0. That is only an upper bound of the family, not the cost of a
+// design that is feasible, but abstraction refinement and SMPMC take it for an invalid result and report that nothing satisfies the specification. OneByOne
+// finds EXIT=1. See tests/synthesizer/test_known_unsound_pruning.py.
+dtmc
+
+hole int EXIT in {0,1};
+
+module m
+    s : [0..3] init 0;    // 0: start, 1: waiting, 2: goal, 3: trap
+    [] s=0 -> (s'=1);
+    [] s=1 & EXIT=1 -> 0.5 : (s'=2) + 0.5 : (s'=1);
+    [] s=1 & EXIT=0 -> (s'=3);
+    [] s>=2 -> (s'=s);
+endmodule
+
+label "done" = s=2;
+
+rewards "cost"
+    s<2 : 1;
+endrewards

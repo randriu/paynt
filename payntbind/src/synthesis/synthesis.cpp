@@ -27,6 +27,7 @@ void define_synthesis(py::module& m) {
     bindings_mdp_family(m);
 
     bindings_coloring(m);
+    bindings_settrie(m);
 
     #ifndef DISABLE_SMG
     bindings_smg(m);

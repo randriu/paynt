@@ -1,6 +1,6 @@
 #pragma once
 
-#include "src/synthesis/quotient/Family.h"
+#include "src/synthesis/coloring/Family.h"
 
 #include <storm/storage/BitVector.h>
 #include <storm/storage/valuations/Valuations.h>

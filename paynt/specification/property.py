@@ -79,6 +79,15 @@ class Property:
     environment: stormpy.Environment | None = None
     # model checking precision
     model_checking_precision: float = 1e-4
+    # cap on minmax (value-iteration-family) solver iterations: without one, a non-converging direction
+    # (observed on a reward property that never stabilizes) can hang indefinitely -- SMPMC in particular
+    # calls model checking once per relevant theory-solver decision, far more often than AR/CEGIS call it
+    # per node, so an unbounded solve is a much larger availability risk for it. 10000 matches molehill's
+    # own default for the reference SMPMC implementation.
+    max_minmax_iterations: int = 10000
+    # --sound: apply no iteration caps. A capped solve that doesn't converge returns an unconverged value
+    # (Storm only logs a warning), which can make pruning unsound; uncapped solves may instead not terminate.
+    sound: bool = False
 
     @classmethod
     def set_model_checking_precision(cls, precision: float) -> None:
@@ -91,6 +100,8 @@ class Property:
     def initialize(cls, use_exact: bool = False) -> None:
         cls.environment = stormpy.Environment()
         cls.set_model_checking_precision(cls.model_checking_precision)
+        if not cls.sound:
+            payntbind.synthesis.set_max_iterations_minmax(cls.environment.solver_environment.minmax_solver_environment, cls.max_minmax_iterations)
 
         se = cls.environment.solver_environment
         # se.set_linear_equation_solver_type(stormpy.EquationSolverType.native)

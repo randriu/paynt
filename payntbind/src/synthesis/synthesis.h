@@ -14,6 +14,7 @@ void bindings_storage(py::module &m);
 void bindings_mdp_family(py::module &m);
 
 void bindings_coloring(py::module &m);
+void bindings_settrie(py::module &m);
 
 void bindings_smg(py::module &m);
 void bindings_posmg(py::module &m);

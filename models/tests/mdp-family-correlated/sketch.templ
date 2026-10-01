@@ -1,0 +1,21 @@
+// Two decisions in a row, both affected by the same unknown environment h. Checking a policy against every environment state by state (letting h differ
+// between the steps) is pessimistic here, so a robust search has to refine it. By hand:
+//   policy (a,c): 0.9*0.5 = 0.45 for h=0, 0.5*0.9 = 0.45 for h=1 -- worst case 0.45, the best one (the per-step worst case would be 0.5*0.5 = 0.25)
+//   policy (a,d): 0.54 / 0.30, (b,c): 0.30 / 0.54, (b,d): 0.36 / 0.36
+// so max over policies of the worst case is 0.45 (sketch.props), and min over policies of the worst case is 0.36 (min.props).
+mdp
+
+hole int h in {0..1};
+
+module m
+  s : [0..3] init 0;
+  [a] s=0 & h=0 -> 0.9 : (s'=1) + 0.1 : (s'=3);
+  [a] s=0 & h=1 -> 0.5 : (s'=1) + 0.5 : (s'=3);
+  [b] s=0 -> 0.6 : (s'=1) + 0.4 : (s'=3);
+  [c] s=1 & h=0 -> 0.5 : (s'=2) + 0.5 : (s'=3);
+  [c] s=1 & h=1 -> 0.9 : (s'=2) + 0.1 : (s'=3);
+  [d] s=1 -> 0.6 : (s'=2) + 0.4 : (s'=3);
+  [done] s>=2 -> true;
+endmodule
+
+label "goal" = s=2;

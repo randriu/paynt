@@ -1,0 +1,69 @@
+// Rocks: an agent on a 4x4 grid must visit two rocks whose positions (the holes) it does not know.
+// Adapted from molehill (https://github.com/linusheck/molehill, GPL-3.0), resources/test/robust/rocks-4-2 --
+// the smallest of its robust-synthesis fixtures: 81 environments, and one policy that visits both rocks in all of
+// them, so exists-policy-forall-environment synthesis is sat (see sketch.props).
+mdp
+
+const int N = 4;
+const int xMIN = 1;
+const int yMIN = 1;
+const int xMAX = N;
+const int yMAX = N;
+
+hole int o1x in {1..3};
+hole int o1y in {1..3};
+
+hole int o2x in {2..4};
+hole int o2y in {2..4};
+
+formula at1 = (x = o1x & y = o1y);
+
+formula at2 = (x = o2x & y = o2y);
+
+formula near1 = o1x_MIN<=x & x<=o1x_MAX & o1y_MIN<=y & y<=o1y_MAX;
+formula near2 = o2x_MIN<=x & x<=o2x_MAX & o2y_MIN<=y & y<=o2y_MAX;
+
+const NUM_OBS = 2;
+formula crash = false;
+formula goal = visit1 & visit2;
+formula done = goal | crash;
+
+
+formula clk_next = mod(clk+1,NUM_OBS+1);
+module clk
+    clk : [0..NUM_OBS] init 0;
+
+    [left]  !done & clk=0 -> (clk'=clk_next);
+    [right] !done & clk=0 -> (clk'=clk_next);
+    [down]  !done & clk=0 -> (clk'=clk_next);
+    [up]    !done & clk=0 -> (clk'=clk_next);
+    
+    [detect1] !done & clk=1 -> (clk'=clk_next);
+    [detect2] !done & clk=2 -> (clk'=clk_next);
+endmodule
+
+
+const double slip = 0.2;
+
+formula xright  = min(x+1,xMAX);
+formula xleft   = max(x-1,xMIN);
+formula yup     = min(y+1,yMAX);
+formula ydown   = max(y-1,yMIN);
+
+module agent
+    x : [xMIN..xMAX] init xMIN;
+    y : [yMIN..yMAX] init yMIN;
+
+    [left]  true -> 1-slip : (x'=xleft)  + slip : (y'=ydown);
+    [right] true -> 1-slip : (x'=xright) + slip : (y'=yup);
+    [down]  true -> 1-slip : (y'=ydown)  + slip : (x'=xright);
+    [up]    true -> 1-slip : (y'=yup)    + slip : (x'=xleft);
+endmodule
+
+module visit1
+    visit1 : bool init false;
+    [detect1] !near1 |  visit1 -> true;
+    [detect1]  near1 & !visit1 -> (visit1'=at1);
+endmodule
+
+module visit2=visit1[visit1=visit2,detect1=detect2,near1=near2,at1=at2] endmodule

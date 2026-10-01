@@ -15,6 +15,7 @@ import paynt.dt.dtnest._cli
 import paynt.pomdp._cli
 import paynt.pomdp.saynt._cli
 import paynt.mdp_family._cli
+import paynt.synthesizer.smpmc._cli
 
 import rich_click as click
 import sys
@@ -84,8 +85,17 @@ def setup_logger(log_path: str | None = None) -> list[logging.Handler]:
 @click.option("--optimum-threshold", type=click.FLOAT, panel="Synthesis", help="known optimum bound")
 @click.option("--precision", type=click.FLOAT, default=1e-4, panel="Synthesis", help="model checking precision")
 @click.option("--exact", is_flag=True, default=False, panel="Synthesis", help="use exact synthesis (very limited at the moment)")
+@click.option(
+    "--sound",
+    is_flag=True,
+    default=False,
+    panel="Synthesis",
+    help="do not cap value/policy iteration: never uses an unconverged model checking result, but a slowly converging solve may run indefinitely",
+)
 @click.option("--timeout", type=int, panel="Synthesis", help="timeout (s)")
-@click.option("--method", type=click.Choice(["onebyone", "ar", "cegis", "hybrid"]), default="ar", show_default=True, panel="Synthesis", help="synthesis method")
+@click.option(
+    "--method", type=click.Choice(["onebyone", "ar", "cegis", "hybrid", "smpmc"]), default="ar", show_default=True, panel="Synthesis", help="synthesis method"
+)
 @click.option("--disable-expected-visits", is_flag=True, default=False, panel="Synthesis", help="do not compute expected visits for the splitting heuristic")
 @click.option(
     "--ce-generator",
@@ -94,6 +104,16 @@ def setup_logger(log_path: str | None = None) -> list[logging.Handler]:
     show_default=True,
     panel="Synthesis",
     help="counterexample generator",
+)
+@click.option(
+    "--constraint",
+    type=click.Choice(["exists", "exists_forall", "costs", "prob0", "prob1"]),
+    default=None,
+    panel="Synthesis",
+    help="custom constraint over the parameter space (SMPMC and CEGIS); defaults to a plain existential search",
+)
+@click.option(
+    "--costs-threshold", type=int, default=None, panel="Synthesis", help="threshold for --constraint costs (reads a sketch.costs file in the project)"
 )
 @click.option(
     "--fsc-synthesis",
@@ -114,6 +134,7 @@ def setup_logger(log_path: str | None = None) -> list[logging.Handler]:
 @add_options(paynt.mdp_family._cli.options)
 @add_options(paynt.dt._cli.options)
 @add_options(paynt.dt.dtnest._cli.options)
+@add_options(paynt.synthesizer.smpmc._cli.options)
 @click.option("--export", type=click.Choice(["jani", "drn", "pomdp"]), panel="Output", help="export the model to specified format and abort")
 @click.option("--export-synthesis", type=click.Path(), default=None, panel="Output", help="base filename to output synthesis result")
 @click.option("--profiling", is_flag=True, default=False, panel="Output", help="run profiling")
@@ -128,6 +149,7 @@ def paynt_run(
     optimum_threshold: float | None,
     precision: float,
     exact: bool,
+    sound: bool,
     timeout: int | None,
     export: str | None,
     method: str,
@@ -153,6 +175,10 @@ def paynt_run(
     dtnest_subtree_depth: int,
     dtnest_error_threshold: float,
     ce_generator: str,
+    constraint: str | None,
+    costs_threshold: int | None,
+    smpmc_forall: str | None,
+    smpmc_verify_robust: bool,
     profiling: bool,
 ) -> None:
 
@@ -183,6 +209,11 @@ def paynt_run(
         "add_dont_care_action": add_dont_care_action,
         "max_subtree_depth": dtnest_subtree_depth,
         "error_threshold": dtnest_error_threshold,
+        "constraint_name": constraint,
+        "costs_threshold": costs_threshold,
+        "costs_file_path": os.path.join(project, "sketch.costs"),
+        "forall_pattern": smpmc_forall,
+        "verify_robust": smpmc_verify_robust,
     }
 
     storm_control = None
@@ -193,7 +224,7 @@ def paynt_run(
     sketch_path = os.path.join(project, sketch)
     properties_path = os.path.join(project, props)
     colored_mdp_factory, task = paynt.parser.sketch.Sketch.load_sketch(
-        sketch_path, properties_path, export, relative_error, precision, constraint_bound, exact, task_kwargs=task_kwargs
+        sketch_path, properties_path, export, relative_error, precision, constraint_bound, exact, task_kwargs=task_kwargs, sound=sound
     )
     synthesizer = paynt.api.get_synthesizer(colored_mdp_factory, task, method, fsc_synthesis, storm_control, dtnest)
     synthesizer.run(optimum_threshold)

@@ -9,6 +9,7 @@ import math
 import payntbind
 
 import paynt.colored_mdp
+import paynt.utils.error_handling
 
 
 def estimate_scheduler_difference(
@@ -21,6 +22,7 @@ def estimate_scheduler_difference(
 ) -> dict[int, float]:
     """Default AR-splitting heuristic: estimate, per inconsistent parameter, how much the choice values differ across the parameter's options (weighted by
     expected visits)."""
+    paynt.utils.error_handling.require_pair_list_coloring(colored_mdp.coloring, "AR split scoring (estimate_scheduler_difference)")
     return payntbind.synthesis.computeInconsistentParameterVariance(
         colored_mdp.parameter_space.native,
         mdp.nondeterministic_choice_indices,

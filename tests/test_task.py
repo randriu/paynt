@@ -33,6 +33,12 @@ class TestSynthesisTask:
         assert wrapped.specification is original.specification
         assert wrapped.timeout == 99
 
+    def test_from_specification_keeps_the_robust_synthesis_fields(self):
+        original = paynt.task.SynthesisTask(_reachability_properties())
+        wrapped = paynt.task.SynthesisTask.from_specification(original.specification, forall_pattern="^o", verify_robust=True)
+        assert wrapped.forall_pattern == "^o"
+        assert wrapped.verify_robust is True
+
     def test_use_exact_reaches_construct_property(self):
         """use_exact must actually flow through SynthesisTask -> construct_specification -> construct_property, which rejects reward properties when
         use_exact=True."""

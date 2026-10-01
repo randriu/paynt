@@ -40,6 +40,7 @@ def get_synthesizer(
     :return: a synthesizer ready to .run()/.synthesize()/.evaluate()
     """
     import paynt.synthesizer.synthesizer
+    import paynt.utils.error_handling
 
     feature_kind = colored_mdp_factory.feature_kind
 
@@ -55,7 +56,10 @@ def get_synthesizer(
         from paynt.dt import DtSynthesizer
         from paynt.dt.dtnest import DtNest
 
-        return DtNest(colored_mdp_factory, task) if dtnest else DtSynthesizer(colored_mdp_factory, task)
+        if dtnest:
+            paynt.utils.error_handling.require_method_ar(method, "--dtnest")
+            return DtNest(colored_mdp_factory, task)
+        return DtSynthesizer(colored_mdp_factory, task, method=method)
 
     if feature_kind == "pomdp" and fsc_synthesis:
         import paynt.pomdp
@@ -70,7 +74,7 @@ def get_synthesizer(
         return paynt.pomdp.decpomdp.DecPomdpSynthesizer(colored_mdp_factory, task, method)
 
     if feature_kind == "family":
-        if method == "onebyone":
+        if method in ("onebyone", "smpmc"):
             return paynt.synthesizer.synthesizer.Synthesizer.for_method(colored_mdp_factory.build(), task, method)
         import paynt.mdp_family
 

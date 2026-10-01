@@ -26,7 +26,7 @@ def synthesize(
         cmdp_factory_dt,
         task,
         build_task.error_threshold,
-        build_task.tree_depth,
+        build_task.max_subtree_depth,
         depth_fine_tuning,
         allow_perturbations,
         recompute_scheduler_perturbation,

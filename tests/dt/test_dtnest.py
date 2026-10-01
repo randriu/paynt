@@ -4,7 +4,9 @@ import stormpy
 import paynt.dt
 import paynt.dt.decision_tree
 import paynt.dt.dtnest
+import paynt.dt.dtnest.api
 import paynt.model.model_builder
+import paynt.parser.sketch
 import paynt.task
 
 from helpers.helper import get_sketch_paths
@@ -127,3 +129,43 @@ class TestRemapNodeQueueAfterReplacement:
         node_queue = [{"id": 5}]
         with pytest.raises(AssertionError):
             paynt.dt.dtnest.DtNest.remap_node_queue_after_replacement(node_queue, tree)
+
+
+class TestDtNestDepths:
+    """The depth of the tree (DtTask.tree_depth) and the depth of the subtrees of the dtnest iteration (DtNestTask.max_subtree_depth) are two settings: the
+    second stays inside the iteration, where it limits the depth of the subtrees that are synthesized and is the depth of the subtrees put into the queue for
+    replacement."""
+
+    def test_the_subtree_depth_of_the_iteration_is_max_subtree_depth_whatever_the_tree_depth(self):
+        _task, build_task, factory = _dtnest_task_and_factory('P>=0.55 [F "goal"]')
+        build_task.tree_depth = 1
+        build_task.max_subtree_depth = 4
+        synthesizer = paynt.dt.dtnest.DtNest(factory, _task)
+        assert synthesizer.subtree_depth == 4
+        # the tree that the synthesizer starts from is that of the tree depth, which dtnest does not change
+        assert synthesizer.colored_mdp.feature_info.decision_tree.get_depth() == 1
+        assert build_task.tree_depth == 1
+
+    def test_the_default_subtree_depth_does_not_depend_on_the_tree_depth(self):
+        _task, build_task, factory = _dtnest_task_and_factory('P>=0.55 [F "goal"]')
+        assert (build_task.tree_depth, build_task.max_subtree_depth) == (0, 7)
+        assert paynt.dt.dtnest.DtNest(factory, _task).subtree_depth == 7
+
+    def test_the_api_hands_the_subtree_depth_to_the_iteration(self, monkeypatch):
+        """Not the depth of the tree: with a tree depth of 2 and subtrees of depth 5, the iteration gets the 5."""
+        calls = []
+        monkeypatch.setattr(paynt.dt.dtnest.api, "_run_dtnest", lambda *args: calls.append(args))
+        task, build_task, factory = _dtnest_task_and_factory('P>=0.55 [F "goal"]')
+        build_task.tree_depth = 2
+        build_task.max_subtree_depth = 5
+        paynt.dt.dtnest.synthesize(factory, task, build_task)
+        [(_factory, _task, epsilon, subtree_depth, *_rest)] = calls
+        assert subtree_depth == 5
+        assert epsilon == build_task.error_threshold
+
+    def test_loading_a_sketch_keeps_the_two_apart(self):
+        sketch_path, props_path = get_sketch_paths("tests/dt-orchard")
+        factory, _task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path, task_kwargs={"tree_depth": 3, "max_subtree_depth": 5})
+        assert (factory.build_task.tree_depth, factory.build_task.max_subtree_depth) == (3, 5)
+        factory, _task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path, task_kwargs={"max_subtree_depth": 2})
+        assert (factory.build_task.tree_depth, factory.build_task.max_subtree_depth) == (0, 2)

@@ -14,6 +14,7 @@ import stormpy
 import payntbind
 
 from .decision_tree import DecisionTree, DtVariable
+from .coloring_general import decision_tree_coloring
 from ._utils import get_state_valuations
 
 import logging
@@ -93,8 +94,17 @@ class DtColoredMdpFactory:
         assert self.build_task is not None
         return self.reset_tree(self.build_task.tree_depth)
 
-    def reset_tree(self, depth: int, enable_harmonization: bool = True) -> paynt.colored_mdp.ColoredMdp:
-        """Produce a ColoredMdp at the given tree depth, discarding any previous tree and coloring."""
+    def reset_tree(self, depth: int, enable_harmonization: bool = True, general: bool = False) -> paynt.colored_mdp.ColoredMdp:
+        """Produce a ColoredMdp at the given tree depth, discarding any previous tree and coloring.
+
+        :param enable_harmonization: whether ColoringSmt's areChoicesConsistent also proposes a split (harmonization) for an inconsistent scheduler. Only AR
+            reads that split; a caller that merely wants the verdict (mapping a scheduler) turns it off, which spares the coloring the work of computing it. The
+            general coloring never proposes one, so it ignores this.
+        :param general: if True, build the tree's coloring as a payntbind.synthesis.ColoringGeneral (see paynt.dt.coloring_general.decision_tree_coloring)
+            instead of the default ColoringSmt. Everything else about the produced ColoredMdp -- its ParameterSpace, DtInfo, feature_kind -- is unaffected: the
+            two colorings are built from identical inputs and expose an identical parameter layout (see decision_tree_coloring's own docstring), so dtpaynt's
+            default (general=False) path and behavior are completely untouched by this option.
+        """
         num_actions = len(self.action_labels)
         dont_care_action = num_actions
         if DtColoredMdpFactory.DONT_CARE_ACTION_LABEL in self.action_labels:
@@ -106,23 +116,37 @@ class DtColoredMdpFactory:
         variables = decision_tree.variables
         variable_name = [v.name for v in variables]
         variable_domain = [v.domain for v in variables]
-        tree_list = decision_tree.to_list()
-        coloring = payntbind.synthesis.ColoringSmt(
-            self.underlying_mdp.nondeterministic_choice_indices,
-            self.choice_to_action,
-            num_actions,
-            dont_care_action,
-            self.underlying_mdp.state_valuations,
-            self.state_is_relevant_bv,
-            variable_name,
-            variable_domain,
-            tree_list,
-            enable_harmonization,
-        )
-        coloring.enableStateExploration(self.underlying_mdp)
+        if general:
+            coloring, parameter_info = decision_tree_coloring(
+                self.underlying_mdp.nondeterministic_choice_indices,
+                self.choice_to_action,
+                dont_care_action,
+                self.action_labels,
+                variables,
+                self.relevant_state_valuations,
+                self.state_is_relevant_bv,
+                decision_tree,
+            )
+            initial_state = self.underlying_mdp.initial_states[0]
+            coloring.enableStateExploration(initial_state, self.choice_destinations)
+        else:
+            tree_list = decision_tree.to_list()
+            coloring = payntbind.synthesis.ColoringSmt(
+                self.underlying_mdp.nondeterministic_choice_indices,
+                self.choice_to_action,
+                num_actions,
+                dont_care_action,
+                self.underlying_mdp.state_valuations,
+                self.state_is_relevant_bv,
+                variable_name,
+                variable_domain,
+                tree_list,
+                enable_harmonization,
+            )
+            coloring.enableStateExploration(self.underlying_mdp)
+            parameter_info = coloring.getFamilyInfo()
 
         # reconstruct the parameter space
-        parameter_info = coloring.getFamilyInfo()
         parameter_space = paynt.parameter_space.parameter_space.ParameterSpace()
         is_action_parameter = [False for _ in parameter_info]
         is_decision_parameter = [False for _ in parameter_info]

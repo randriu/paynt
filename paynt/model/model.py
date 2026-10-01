@@ -6,6 +6,7 @@ import stormpy
 
 import paynt.specification.property
 import paynt.specification.property_result
+import paynt.utils.error_handling
 
 import payntbind
 
@@ -49,7 +50,13 @@ class Mdp:
     def check_specification(
         self, spec: paynt.specification.property.Specification, constraint_indices: Any = None, short_evaluation: bool = False
     ) -> paynt.specification.property_result.SpecificationResult:
-        """Assuming this is a DTMC."""
+        """Check the specification on this model.
+
+        A model that still has nondeterminism (the full assignment of an incomplete coloring or of an MDP family, see ColoredMdp.build_assignment) is checked
+        property by property, each in the direction that satisfies it: the remaining choices are resolved in the best way for that property. Several properties
+        would each be given a policy of their own instead of a common one, so only a single property is supported for such a model.
+        """
+        paynt.utils.error_handling.require_single_property_on_nondeterministic_model(self, spec)
         if constraint_indices is None:
             constraint_indices = spec.all_constraint_indices()
         results: list[paynt.specification.property_result.PropertyResult | None] = [None for _ in spec.constraints]

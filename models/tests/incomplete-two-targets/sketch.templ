@@ -1,0 +1,21 @@
+// State 0 offers two UNCOLORED choices, a and b: one leads to the absorbing state 1 (label "A"), the other to state 2 (label "B"). No parameter colors them, so
+// every assignment leaves the choice open (an incomplete coloring). The hole only decorates the unreachable state 3, so that the parameter space is not empty.
+// Note: the parser takes an MDP with a hole for an MDP family, where the nondeterminism is the agent's policy; tests/coloring/test_incomplete_coloring.py takes
+// the parsed parts and makes a generic colored MDP of them, which is the incomplete coloring.
+mdp
+
+hole int D in {0,1};
+
+module m
+	s : [0..5] init 0;
+	[a] s=0 -> (s'=1);
+	[b] s=0 -> (s'=2);
+	[] s=1 -> (s'=1);
+	[] s=2 -> (s'=2);
+	[] s=3 -> (s'=D+4);
+	[] s=4 -> (s'=4);
+	[] s=5 -> (s'=5);
+endmodule
+
+label "A" = s=1;
+label "B" = s=2;

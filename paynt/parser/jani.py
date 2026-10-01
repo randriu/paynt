@@ -8,6 +8,7 @@ import payntbind
 import paynt.parameter_space.parameter_space
 import paynt.specification.property
 import paynt.model.model_builder
+import paynt.utils.error_handling
 
 import itertools
 
@@ -57,6 +58,9 @@ class JaniUnfolder:
         properties_old = specification.all_properties()
         stormpy_properties = [p.property for p in properties_old]
         jani, properties = prism.to_jani(stormpy_properties)
+        paynt.utils.error_handling.require_no_holes_in_state_values(
+            jani, [parameter_space.parameter_name(index) for index in range(parameter_space.num_parameters)]
+        )
 
         # upon translation, some properties may change their atoms, so we need to re-wrap all properties
         properties_unpacked = []

@@ -46,6 +46,10 @@ class Timer:
     def time_limit_reached(self) -> bool:
         return self.time_limit_seconds is not None and self.read() > self.time_limit_seconds
 
+    def time_remaining(self) -> float | None:
+        """Seconds left until time_limit_reached() turns true (negative once it has), or None if there is no time limit."""
+        return None if self.time_limit_seconds is None else self.time_limit_seconds - self.read()
+
 
 class GlobalTimer:
     global_timer: Timer | None = None
@@ -65,6 +69,10 @@ class GlobalTimer:
     @classmethod
     def time_limit_reached(cls) -> bool:
         return cls.global_timer is not None and cls.global_timer.time_limit_reached()
+
+    @classmethod
+    def time_remaining(cls) -> float | None:
+        return None if cls.global_timer is None else cls.global_timer.time_remaining()
 
 
 class GlobalMemoryLimit:

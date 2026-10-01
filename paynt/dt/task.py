@@ -8,6 +8,7 @@ from typing import Any
 class DtTask:
     """Feature-specific build knobs for decision-tree synthesis, owned by DtColoredMdpFactory (factory.build_task)."""
 
+    # the depth of the tree to synthesize (CLI's --tree-depth)
     tree_depth: int = 0
     tree_enumeration: bool = False
     # path to a JSON scheduler file to be mapped to a decision tree (CLI's --tree-map-scheduler)

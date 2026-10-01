@@ -4,6 +4,7 @@
 #include "Family.h"
 #include "Coloring.h"
 #include "ColoringSmt.h"
+#include "ColoringGeneral.h"
 #include "src/synthesis/translation/componentTranslations.h"
 
 #include <storm/storage/expressions/ExpressionManager.h>
@@ -372,5 +373,58 @@ void bindings_coloring(py::module& m) {
         .def("areChoicesConsistent", &synthesis::ColoringSmt<>::areChoicesConsistent)
         // .def_property_readonly("unsat_core", [](synthesis::ColoringSmt<>& coloring) {return coloring.unsat_core;})
         // .def("getProfilingInfo", &synthesis::ColoringSmt<>::getProfilingInfo)
+        ;
+
+    py::enum_<synthesis::ColoringGeneral::NodeOp>(m, "ColoringGeneralNodeOp")
+        .value("ConstTerm", synthesis::ColoringGeneral::NodeOp::ConstTerm)
+        .value("ParamTerm", synthesis::ColoringGeneral::NodeOp::ParamTerm)
+        .value("StateColTerm", synthesis::ColoringGeneral::NodeOp::StateColTerm)
+        .value("ChoiceColTerm", synthesis::ColoringGeneral::NodeOp::ChoiceColTerm)
+        .value("AddTerm", synthesis::ColoringGeneral::NodeOp::AddTerm)
+        .value("SubTerm", synthesis::ColoringGeneral::NodeOp::SubTerm)
+        .value("MulTerm", synthesis::ColoringGeneral::NodeOp::MulTerm)
+        .value("IteTerm", synthesis::ColoringGeneral::NodeOp::IteTerm)
+        .value("TrueF", synthesis::ColoringGeneral::NodeOp::TrueF)
+        .value("FalseF", synthesis::ColoringGeneral::NodeOp::FalseF)
+        .value("NotF", synthesis::ColoringGeneral::NodeOp::NotF)
+        .value("AndF", synthesis::ColoringGeneral::NodeOp::AndF)
+        .value("OrF", synthesis::ColoringGeneral::NodeOp::OrF)
+        .value("ImpliesF", synthesis::ColoringGeneral::NodeOp::ImpliesF)
+        .value("IteF", synthesis::ColoringGeneral::NodeOp::IteF)
+        .value("EqF", synthesis::ColoringGeneral::NodeOp::EqF)
+        .value("NeF", synthesis::ColoringGeneral::NodeOp::NeF)
+        .value("LtF", synthesis::ColoringGeneral::NodeOp::LtF)
+        .value("LeF", synthesis::ColoringGeneral::NodeOp::LeF)
+        .value("GtF", synthesis::ColoringGeneral::NodeOp::GtF)
+        .value("GeF", synthesis::ColoringGeneral::NodeOp::GeF)
+        .value("InSetF", synthesis::ColoringGeneral::NodeOp::InSetF)
+        .value("InBitsF", synthesis::ColoringGeneral::NodeOp::InBitsF)
+        ;
+
+    py::classh<synthesis::ColoringGeneral>(m, "ColoringGeneral")
+        .def(py::init<
+            std::vector<uint64_t> const&,
+            uint64_t,
+            std::vector<uint8_t> const&,
+            std::vector<int64_t> const&,
+            std::vector<int32_t> const&,
+            std::vector<int32_t> const&,
+            std::vector<std::vector<uint64_t>> const&,
+            std::vector<int32_t> const&,
+            std::vector<std::vector<int64_t>> const&,
+            std::vector<std::vector<int64_t>> const&,
+            storm::storage::BitVector const&
+        >())
+        .def_static("fromColoring", &synthesis::ColoringGeneral::fromColoring)
+        .def("enableStateExploration", &synthesis::ColoringGeneral::enableStateExploration)
+        .def("setExactMode", &synthesis::ColoringGeneral::setExactMode)
+        .def("selectCompatibleChoices", py::overload_cast<synthesis::Family const&>(&synthesis::ColoringGeneral::selectCompatibleChoices))
+        .def(
+            "selectCompatibleChoices",
+            py::overload_cast<synthesis::Family const&, storm::storage::BitVector const&>(&synthesis::ColoringGeneral::selectCompatibleChoices)
+        )
+        .def("getStateToHoles", &synthesis::ColoringGeneral::getStateToHoles)
+        .def("relevantParameters", &synthesis::ColoringGeneral::relevantParameters)
+        .def("areChoicesConsistent", &synthesis::ColoringGeneral::areChoicesConsistent)
         ;
 }

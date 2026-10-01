@@ -305,7 +305,7 @@ hole int P_0_1_3_1__0_1_0_1__0_0 in {0};
 // 6 - empty
 // 7 - placement
 module strategy
-    pick : [0..4] init 0;
+    pick : [0..7] init 0;
 	mem : [0..1] init 0;
 
     [p] pick=0 & mem=0 & o_start=false & o_fuel=5 & amdone=false & cangoeast=true & cangonorth=false & cangosouth=true & cangowest=false & hascrash=false & refuelAllowed=false -> (mem'=M_0_0_5_0__1_0_1_0__0_0) & (pick'=P_0_0_5_0__1_0_1_0__0_0);

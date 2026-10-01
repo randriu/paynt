@@ -3,6 +3,12 @@ Colored MDP (Definition 2 of arXiv:2511.08078): a colored MDP C = (M, V, kappa) 
 parameter space V, and a coloring kappa: S x Act subseteq V such that for every theta in V and state s in S
 it holds that there's exactly one action a such that theta in kappa(s, a).
 
+Here the coloring may also be incomplete: a state may keep several choices under a full assignment theta (say, choices that no parameter colors), so that
+C[theta] is an MDP and not a Markov chain. The specification is then to hold for the best resolution of the choices theta leaves, in the direction of each
+property -- as if every such state had a policy parameter of its own that model checking, rather than the search, sets. Definition 2 is the case where
+nothing is left to resolve. Incomplete coloring is supported for a single property; and not by robust synthesis, whose policy has to be explicit (see
+ColoredMdp.build_assignment). Every reachable state must still keep at least one choice.
+
 This is the only concrete ColoredMdp class. `feature_kind` (set at construction, e.g. "dt"/"pomdp"/"posmg"/
 "family"/"pomdp_family"/"decpomdp") is what dispatch code and the 3 feature-dependent branches below key off,
 instead of an isinstance check. Feature-specific state lives on
@@ -14,10 +20,15 @@ from __future__ import annotations
 
 from typing import Any
 
+import stormpy
+
 import paynt.task
 import paynt.parameter_space.parameter_space
+import paynt.specification.property
 import paynt.model.model
 import paynt.synthesizer.search_node
+import paynt.utils.coloring
+import paynt.utils.error_handling
 
 import logging
 
@@ -40,7 +51,7 @@ class ColoredMdp:
         self.underlying_mdp = underlying_mdp
         # V: the constrained parameter space
         self.parameter_space = parameter_space
-        # kappa: raw payntbind coloring object (Coloring or ColoringSmt); no Python wrapper exists for this
+        # kappa: raw payntbind coloring object (Coloring, ColoringSmt or ColoringGeneral); no Python wrapper exists for this
         self.coloring = coloring
         self.use_exact = use_exact
         # discriminator used by dispatch code to pick the right feature package without an isinstance check
@@ -52,6 +63,16 @@ class ColoredMdp:
         # internal plumbing needed by build()/scheduler_selection() below, not part of the public contract
         self.subsystem_builder_options = paynt.model.model.SubmodelBuilder.default_builder_options()
         self.choice_destinations = paynt.model.model.ModelIndex.compute_choice_destinations(underlying_mdp, use_exact)
+
+    @property
+    def has_general_coloring(self) -> bool:
+        """Whether kappa is a payntbind ColoringGeneral (an arbitrary formula per choice, see paynt.utils.coloring_builder) rather than a coloring given by
+        explicit (parameter, option) pairs.
+
+        Operations that read those pairs back from the coloring are unavailable for a general coloring, e.g. scheduler_selection (they fail through
+        paynt.utils.error_handling.require_pair_list_coloring).
+        """
+        return paynt.utils.coloring.is_general_coloring(self.coloring)
 
     def build(
         self, parameter_space: paynt.parameter_space.parameter_space.ParameterSpace, parent_selected_choices: Any = None
@@ -68,27 +89,58 @@ class ColoredMdp:
             choices = self.coloring.selectCompatibleChoices(parameter_space.native)
         else:
             choices = self.coloring.selectCompatibleChoices(parameter_space.native, parent_selected_choices)
-        mdp = paynt.model.model.SubmodelBuilder.build_submdp(self.underlying_mdp, choices, self.subsystem_builder_options)
+        with paynt.utils.error_handling.explain_state_without_choice(self, choices, parameter_space):
+            mdp = paynt.model.model.SubmodelBuilder.build_submdp(self.underlying_mdp, choices, self.subsystem_builder_options)
         return mdp, choices
 
     def build_assignment(self, parameter_space: paynt.parameter_space.parameter_space.ParameterSpace) -> paynt.model.model.SubMdp:
-        """Compute the induced model C[theta] for a full parameter assignment: a DTMC for every feature except "family"/"pomdp_family", where fixing the
-        environment does not also fix the agent's policy, so the result can still be nondeterministic and must stay an MDP."""
+        """Compute the induced model C[theta] for a full parameter assignment: a DTMC if theta leaves one choice in every state, else an MDP.
+
+        An MDP results from an incomplete coloring, and always for "family"/"pomdp_family", where fixing the environment does not also fix the agent's policy.
+        The remaining choices are then resolved by model checking, in the direction of the property (existentially). That is sound for a single property only,
+        see Mdp.check_specification; robust synthesis rejects it, as its policy is a set of parameters chosen before the environment.
+        """
         assert parameter_space.size == 1, "expecting parameter space of size 1"
         choices = self.coloring.selectCompatibleChoices(parameter_space.native)
-        model, state_map, choice_map = paynt.model.model.SubmodelBuilder.restrict(self.underlying_mdp, choices, self.subsystem_builder_options)
-        if self.feature_kind in ("family", "pomdp_family"):
+        with paynt.utils.error_handling.explain_state_without_choice(self, choices, parameter_space):
+            model, state_map, choice_map = paynt.model.model.SubmodelBuilder.restrict(self.underlying_mdp, choices, self.subsystem_builder_options)
+        if self.feature_kind in ("family", "pomdp_family") or model.nr_choices != model.nr_states:
             return paynt.model.model.SubMdp(model, state_map, choice_map)
         assert choices.number_of_set_bits() > 0
         dtmc = paynt.model.model.SubmodelBuilder.mdp_to_dtmc(model)
         return paynt.model.model.SubMdp(dtmc, state_map, choice_map)
+
+    def selected_choices(
+        self, assignment: paynt.parameter_space.parameter_space.ParameterSpace, specification: paynt.specification.property.Specification
+    ) -> Any:
+        """The choices of the underlying MDP that the solution assignment stands for: a mask with the choice taken in every state that it reaches.
+
+        If theta leaves one choice per state, those are its choices. If it leaves several (an incomplete coloring, see build_assignment), it is the choices of a
+        best policy for the single property of the specification -- in the direction that satisfies it, as when it was checked -- so the uncolored choices it
+        takes are in the mask too.
+        """
+        model = self.build_assignment(assignment)
+        if model.is_deterministic:
+            choices = stormpy.BitVector(self.underlying_mdp.nr_choices, False)
+            for choice in model.underlying_mdp_choice_map:
+                choices.set(choice, True)
+            return choices
+        prop = specification.optimality if specification.optimality is not None else specification.constraints[0]
+        scheduler = model.model_check_property(prop).result.scheduler
+        state_to_choice = paynt.model.model.ModelIndex.scheduler_to_state_to_choice(self.underlying_mdp, self.choice_destinations, model, scheduler)
+        return paynt.model.model.ModelIndex.state_to_choice_to_choices(self.underlying_mdp, state_to_choice)
 
     def scheduler_selection(self, mdp: Any, scheduler: Any) -> list[list[int]]:
         """Get parameter options involved in the scheduler selection (the inverse of build(): choices -> V).
 
         For "posmg", unreachable choices are kept rather than discarded (unlike every other feature) since the induced model must still be verified as a game,
         not a plain MDP.
+
+        Not available for a general coloring (see has_general_coloring), which has no per-parameter option lists to read back.
         """
+        paynt.utils.error_handling.require_pair_list_coloring(
+            self.coloring, "generic AR and Hybrid (scheduler_selection)", "use --method onebyone, cegis or smpmc"
+        )
         assert scheduler.memoryless and scheduler.deterministic
         discard_unreachable_choices = self.feature_kind != "posmg"
         state_to_choice = paynt.model.model.ModelIndex.scheduler_to_state_to_choice(

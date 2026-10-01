@@ -47,3 +47,15 @@ class TestDtNestTask:
     def test_initial_tree_defaults_to_none(self):
         build_task = paynt.dt.dtnest.task.DtNestTask(error_threshold=0.05)
         assert build_task.initial_tree is None
+
+    def test_the_depth_of_the_tree_is_that_of_dt_task(self):
+        """DtNestTask does not touch the depth of the tree to synthesize: its default is that of DtTask, and it is not the depth of the subtrees."""
+        build_task = paynt.dt.dtnest.task.DtNestTask()
+        assert build_task.tree_depth == paynt.dt.task.DtTask().tree_depth == 0
+
+    def test_the_depth_of_the_subtrees_is_a_setting_of_its_own(self):
+        assert paynt.dt.dtnest.task.DtNestTask().max_subtree_depth == 7
+        build_task = paynt.dt.dtnest.task.DtNestTask(tree_depth=2, max_subtree_depth=4)
+        assert (build_task.tree_depth, build_task.max_subtree_depth) == (2, 4)
+        build_task = paynt.dt.dtnest.task.DtNestTask(max_subtree_depth=3)
+        assert (build_task.tree_depth, build_task.max_subtree_depth) == (0, 3)

@@ -1,0 +1,39 @@
+// Knuth's model of a fair die using only fair coins.
+// Adapted from molehill (https://github.com/linusheck/molehill, GPL-3.0), resources/test/simple --
+// the smallest generic-feature (DTMC-with-holes) sketch available, used here as PAYNT's own minimal
+// SMPMC test fixture: 8 states, 3 holes, single threshold property (see sketch.props).
+dtmc
+
+const double p=0.4;
+const double q=0.8;
+
+hole int x1 in {1,2,3,4};
+hole int x2 in {3,4};
+hole int x3 in {8};
+
+module die
+	// local state
+	s : [0..7] init 0;
+
+	[] s=0 -> q : (s'=x1) + 1-q : (s'=x3);
+	[] s=1 -> p : (s'=x2) + 1-p : (s'=3);
+	[] s=3 -> 0.1 : (s'=x1) + 0.9 : (s'=3);
+	[] s=4 -> 0.25 : (s'=5) + 0.75 : (s'=6);
+	[] s=5 -> 1: (s'=7);
+	[] s=6 -> 1: (s'=7);
+	[] s=7 -> 1: (s'=7);
+	[] s=8 -> 1: (s'=8);
+endmodule
+
+rewards "coin_flips"
+	s<7 : 1;
+endrewards
+
+label "s0" = s=0;
+label "s1" = s=1;
+label "s2" = s=2;
+label "s3" = s=3;
+label "s4" = s=4;
+label "s5" = s=5;
+label "good" = s!=5;
+label "done" = s=7;

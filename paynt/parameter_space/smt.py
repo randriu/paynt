@@ -4,12 +4,16 @@ from typing import Any, TYPE_CHECKING
 
 import z3
 
+import paynt.parameter_space.bitvec
+import paynt.parameter_space.constraints.constraint
 import paynt.parameter_space.parameter_space
 
 if TYPE_CHECKING:
     # search_node imports this module, so only import it for annotations to avoid a circular import at
     # runtime -- from __future__ import annotations means these hints are never evaluated eagerly anyway
+    import paynt.colored_mdp
     import paynt.synthesizer.search_node
+    import paynt.task
 
 import logging
 
@@ -37,6 +41,8 @@ class ParameterSpaceEncoding:
             parameter_clauses.append(or_clause)
 
         encoding = parameter_clauses[0] if len(parameter_clauses) == 1 else z3.And(parameter_clauses)
+        if smt_solver.constraint_clauses:
+            encoding = z3.And(encoding, *smt_solver.constraint_clauses)
 
         self.parameter_clauses = parameter_clauses
         self.encoding = encoding
@@ -60,13 +66,23 @@ class ParameterSpaceEncoding:
 
 
 class SmtSolver:
-    def __init__(self, parameter_space: paynt.parameter_space.parameter_space.ParameterSpace):
+    def __init__(
+        self,
+        parameter_space: paynt.parameter_space.parameter_space.ParameterSpace,
+        constraint: paynt.parameter_space.constraints.constraint.Constraint | None = None,
+        colored_mdp: paynt.colored_mdp.ColoredMdp | None = None,
+        task: paynt.task.SynthesisTask | None = None,
+    ):
 
         # SMT solver containing description of the unexplored design space
         self.solver = z3.Solver()
 
-        # for each parameter contains a corresponding solver variable
-        self.solver_vars: list[Any] = [z3.Int(parameter) for parameter in range(parameter_space.num_parameters)]
+        # for each parameter contains a corresponding solver variable. BitVec (not Int, despite CEGIS
+        # never going through a z3.UserPropagateBase where that would matter) so this can share both the
+        # variable-construction helper and the ConstraintContext shape with SMPMC's encoding -- see
+        # paynt/parameter_space/bitvec.py and paynt/parameter_space/constraints/constraint.py.
+        self.solver_vars: list[Any]
+        self.solver_vars, self.width, _name_to_parameter = paynt.parameter_space.bitvec.parameter_bitvec_variables(parameter_space)
         # for each parameter contains a list of equalities [p==opt1,p==opt2,...],
         #   where p is the corresponding solver variable
         self.solver_clauses: list[list[Any]] = []
@@ -79,9 +95,20 @@ class SmtSolver:
             clauses = [self.create_parameter_clause(parameter, option) for option in parameter_space.parameter_options(parameter)]
             self.solver_clauses.append(clauses)
 
+        # custom constraint (e.g. --constraint costs/prob0/prob1), built once here rather than per node:
+        # the clauses reference only self.solver_vars/width, not any node-specific narrowing, and some
+        # constraints (e.g. costs) are expensive enough that rebuilding per node would be wasteful
+        self.constraint_clauses: list[Any] = []
+        if constraint is not None:
+            assert colored_mdp is not None and task is not None, "constraint requires colored_mdp and task"
+            ctx = paynt.parameter_space.constraints.constraint.ConstraintContext(
+                colored_mdp=colored_mdp, parameter_space=parameter_space, task=task, variables=self.solver_vars, width=self.width, viable=None
+            )
+            self.constraint_clauses = constraint.build(ctx)
+
     def create_parameter_clause(self, parameter: int, option: int) -> Any:
         var = self.solver_vars[parameter]
-        return var == option
+        return var == z3.BitVecVal(option, self.width)
 
     def pick_assignment(self, node: paynt.synthesizer.search_node.SearchNode) -> paynt.parameter_space.parameter_space.ParameterSpace | None:
         """:return: unexplored parameter assignment from node's parameter space (or None if no instance remains)"""

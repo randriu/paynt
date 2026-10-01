@@ -1,0 +1,26 @@
+// A sender transmits a message once. SAFE=0 is cheap (1 unit of cost) but loses the message half of the time; SAFE=1 costs 2 and loses it one time in a hundred.
+//
+// The specification (sketch.props) wants the message delivered with probability at least 0.9 (a constraint), and among the designs that do, the cheapest (an
+// objective). Only SAFE=1 delivers that often, so it is the answer, at a cost of 2.
+//
+// The design that is best for the objective alone is SAFE=0, and it violates the constraint. That is the situation of this benchmark: abstraction refinement
+// (and hybrid) stop at the root of their search, because the scheduler that minimizes the cost is one single design, and report that nothing satisfies the
+// specification. OneByOne and CEGIS find SAFE=1. See tests/synthesizer/test_known_unsound_pruning.py.
+dtmc
+
+hole int SAFE in {0,1};
+
+module m
+    s : [0..2] init 0;    // 0: start, 1: delivered, 2: lost
+    [go] s=0 & SAFE=0 -> 0.5 : (s'=1) + 0.5 : (s'=2);
+    [go] s=0 & SAFE=1 -> 0.99 : (s'=1) + 0.01 : (s'=2);
+    [] s>0 -> (s'=s);
+endmodule
+
+label "delivered" = s=1;
+label "finished" = s>0;
+
+rewards "cost"
+    [go] SAFE=0 : 1;
+    [go] SAFE=1 : 2;
+endrewards
