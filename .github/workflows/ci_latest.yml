@@ -34,14 +34,16 @@ jobs:
              docker_tag: "ci-debug",
              build_type: "Debug",
              setup_args: "",
-             optional_libs: "[test]"
+             optional_libs: "[test]",
+             coverage: false
           }
           - {name: "Release",
              stormpy_base: "ci",
              docker_tag: "ci",
              build_type: "Release",
              setup_args: "",
-             optional_libs: "[test]"
+             optional_libs: "[test]",
+             coverage: true
           }
       fail-fast: false
 
@@ -53,11 +55,29 @@ jobs:
           docker build -t randriu/paynt:${{ matrix.build_type.docker_tag }} . \
             --build-arg BASE_IMAGE=movesrwth/stormpy:${{ matrix.build_type.stormpy_base }} \
             --build-arg build_type=${{ matrix.build_type.build_type }} \
+            --build-arg options="${{ matrix.build_type.optional_libs }}" \
             --build-arg no_threads=${NR_JOBS}
       - name: Run Docker
         run: docker run -d -it --name ci randriu/paynt:${{ matrix.build_type.docker_tag }}
       - name: Run PAYNT tests
-        run: docker exec ci bash -c "cd /opt/paynt; pytest tests"
+        run: docker exec ci bash -c "cd /opt/paynt; pytest tests ${{ matrix.build_type.coverage && '--cov --cov-report=html' || '' }}"
+      - name: Coverage summary
+        if: matrix.build_type.coverage
+        run: |
+          {
+            echo "### Coverage of paynt: $(docker exec ci bash -c 'cd /opt/paynt; coverage report --format=total')%"
+            echo "<details><summary>Per file</summary>"
+            echo
+            docker exec ci bash -c "cd /opt/paynt; coverage report --format=markdown --sort=cover"
+            echo "</details>"
+          } >> $GITHUB_STEP_SUMMARY
+          docker cp ci:/opt/paynt/htmlcov htmlcov
+      - name: Upload coverage report
+        if: matrix.build_type.coverage
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-html
+          path: htmlcov
       - name: Run Payntbind tests
         run: docker exec ci bash -c "cd /opt/paynt/payntbind; pytest tests"
 

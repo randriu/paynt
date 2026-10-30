@@ -57,8 +57,15 @@ dev = [
 ]
 test = [
     "pytest",
+    "pytest-cov>=7",
+    "pytest-timeout",
+    "pytest-xdist",
+    "pytest-randomly",
     "nbval",
     "numpy",
+]
+mutation = [
+    "mutmut>=3.8",
 ]
 
 [tool.scikit-build]
@@ -131,3 +138,22 @@ pythonpath = ["."]
 testpaths = ["tests"]
 python_files = ["test*.py"]
 python_functions = ["*_test", "test_*"]
+# random test order is opt-in: pytest -p randomly
+addopts = ["-ra", "--strict-markers", "--durations=0", "--durations-min=60", "-p", "no:randomly"]
+xfail_strict = true
+# only a guard against hangs, Debug builds run the tests about 3x slower
+timeout = 600
+timeout_method = "thread"
+
+[tool.coverage.run]
+source = ["paynt"]
+branch = true
+patch = ["subprocess"]
+
+[tool.coverage.report]
+skip_empty = true
+
+[tool.mutmut]
+source_paths = ["paynt/"]
+do_not_mutate = ["paynt/pomdp/saynt/*"] # TODO remove once SAYNT is fixed and tested
+also_copy = ["models/tests/"]

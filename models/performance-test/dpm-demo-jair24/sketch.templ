@@ -1,0 +1,157 @@
+dtmc
+
+// timing:
+// tick-0:
+//     queue state is observed and state change is planned (pm)
+//     request are generated (if service requester is active)
+// tick-1:
+//     requests are served
+//     state change is executed
+//     service requester changes its state
+//     battery depletes
+
+// initial queue size
+const int q_init = 0;
+
+// ----- synthesized parameters ------------------------------------------------
+
+// profiles desired at observation levels
+// 0 - sleep, 1 - idle, 2 - active
+hole int P1 in {0,1,2};
+hole int P2 in {0,1,2};
+hole int P3 in {0,1,2};
+hole int P4 in {0,1,2};
+
+// observation level thresholds
+hole double T1 in {0.0,0.1,0.2,0.3,0.4};
+hole double T2 in {0.5};
+hole double T3 in {0.6,0.7,0.8,0.9};
+
+// queue size
+hole int QMAX in {1,2,3,4,5,6,7,8,9,10};
+
+//const int QMAX = 10;
+
+// ----- modules ---------------------------------------------------------------
+
+
+// clock
+
+module CLOCK
+    c : [0..1] init 0;
+    [tick0] c=0 -> (c'=1);
+    [tick1] c=1 -> (c'=0);
+endmodule
+
+
+// power manager
+
+module PM
+    pm  :  [0..2] init 0; // 0 - sleep, 1 - idle, 2 - active
+    [tick0] q <= T1*QMAX -> (pm'=P1);
+    [tick0] q > T1*QMAX & q <= T2*QMAX -> (pm'=P2);
+    [tick0] q > T2*QMAX & q <= T3*QMAX -> (pm'=P3);
+    [tick0] q > T3*QMAX -> (pm'=P4);
+endmodule
+
+
+// service provider
+
+module SP
+    sp : [0..4] init 0;
+    // 0 - sleep, 1 - idle, 2 - active
+    // waiting states: 3 - sleep to idle, 4 - idle to active
+
+    // immediate transitions - change to lower-energy (or same) state
+    [tick1] sp <= 2 & pm <= sp -> (sp'=pm);
+
+    // transitions through waiting states - change to higher-energy state (sleep to idle or idle to active)
+    [tick1] sp <= 2 & pm > sp -> (sp'=sp+3);
+
+    // waiting states
+    [tick1] sp = 3 -> 0.9 : (sp'=sp-2) + 0.1 : true;
+    [tick1] sp = 4 -> 0.7 : (sp'=sp-2) + 0.3 : true;
+
+endmodule
+
+
+// service requester
+
+module SR
+    sr : [0..1] init 0; // 0 - idle, 1 - active
+    [tick1] sr=0 -> 0.5: true + 0.5: (sr' = 1);
+    [tick1] sr=1 -> 0.8: true + 0.2: (sr' = 0);
+endmodule
+
+
+// service request queue
+
+module SRQ
+    q : [0..10000] init q_init;
+    lost : [0..1] init 0;
+
+    [tick0] true -> (lost'=0);
+
+    [tick1] sr=1 & sp!=2 & q=QMAX  -> (lost'=1);
+    [tick1] sr=1 & sp!=2 & q!=QMAX -> (q'=min(q+1,QMAX));
+    [tick1] sr=1 & sp=2 & q=QMAX  -> 0.94: true + 0.06: (lost'=1); // serve
+    [tick1] sr=1 & sp=2 & q!=QMAX -> 0.95: true + 0.05: (q'=min(q+1,QMAX)); // serve
+
+    [tick1] sr=0 & sp=2 -> 0.95: (q'=max(q-1,0)) + 0.05: true; // serve
+    [tick1] sr=0 & sp!=2 -> true;
+
+endmodule
+
+// battery
+
+module BAT
+    bat : [0..1] init 1; // 0 empty, 1 - operational
+    [tick1] bat=0 ->true;
+    [tick1] bat=1 -> 0.001 : (bat'=0) + 0.999 : true;
+endmodule
+
+// ----- rewards ----------------------------------------------------------------
+
+label "finished" = (bat = 0);
+
+rewards "time"
+    [tick0] true : 1;
+endrewards
+
+rewards "queuesize"
+    [tick0] true: q;
+endrewards
+
+rewards "requests"
+    [tick0] sr=1 : 1;
+endrewards
+
+rewards "served"
+    [tick1] q > 0 & sp=2 : 1;
+endrewards
+
+rewards "requests_lost"
+    [tick0] lost=1 : 1;
+endrewards
+
+rewards "power"
+    [tick1] sp=2 : 100 + 10*q; // active
+    [tick1] sp=4 : 10; // idle to active
+    [tick1] sp=3 : 5; // sleep to idle
+endrewards
+
+rewards "idle_steps"
+    [tick1] sp=1 : 1;
+endrewards
+
+rewards "idle_active_steps"
+    [tick1] sp=4 : 1;
+endrewards
+
+rewards "sleep_steps"
+    [tick1] sp=0 : 1;
+endrewards
+
+rewards "active_steps"
+    [tick1] sp=2 : 1;
+endrewards

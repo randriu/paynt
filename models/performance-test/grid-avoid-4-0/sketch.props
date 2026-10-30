@@ -1,0 +1,9 @@
+Pmax=? [!"bad" U "goal"]
+//R{"steps"}min=? [ F "goal" ]
+
+//R{"steps"}min=? [ F "goal" | "bad" ]
+
+//Pmax=? [ F "goal" ]
+
+
+//P>=0.25 [!"bad" U "goal"]

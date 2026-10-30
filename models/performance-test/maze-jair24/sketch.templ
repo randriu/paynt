@@ -1,0 +1,209 @@
+// maze example (POMDP)
+// slightly extends that presented in
+// Littman, Cassandra and Kaelbling
+// Learning policies for partially observable environments: Scaling up
+// Technical Report CS, Brown University
+// Encoding in PRISM by gxn 29/01/16
+// Adapted as a family with memory by Sebastian Junges
+
+
+
+// state space (value of variable "s")
+
+//  0  1  2  3  4
+//  5     6     7
+//  8     9    10
+// 11     13   12
+
+// 13 is the target
+
+dtmc
+
+const int CMAX = 0;
+//const double THRESHOLD;
+
+// o=0 - observation in initial state
+// o=1 - west and north walls (s0)
+// o=2 - north and south walls (s1 and s3)
+// o=3 - north wall (s2)
+// o=4 - east and north wall (s4)
+// o=5 - east and west walls (s5, s6, s7, s8, s9 and s10)
+// o=6 - east, west and south walls (s11 and s12)
+hole int M_0_1 in {0,1};
+hole int M_0_2 in {0,1};
+hole int M_0_3 in {0,1};
+hole int M_0_4 in {0,1};
+hole int M_0_5 in {0,1};
+hole int M_0_6 in {0,1};
+hole int M_1_1 in {0,1};
+hole int M_1_2 in {0,1};
+hole int M_1_3 in {0,1};
+hole int M_1_4 in {0,1};
+hole int M_1_5 in {0,1};
+hole int M_1_6 in {0,1};
+hole int P_0_1 in {2,3};
+hole int P_0_2 in {2,4};
+hole int P_0_3 in {2,3,4};
+hole int P_0_4 in {3,4};
+hole int P_0_5 in {1,3};
+hole int P_0_6 in {1};
+hole int P_1_1 in {2,3};
+hole int P_1_2 in {2,4};
+hole int P_1_3 in {2,3,4};
+hole int P_1_4 in {3,4};
+hole int P_1_5 in {1,3};
+hole int P_1_6 in {1};
+
+module actuator
+    v : [0..4] init 0;
+
+    [steer_north] v = 0 -> 0.8: (v'=1) + 0.08: (v'=4) + 0.08: (v'=2) + 0.04: (v'=3);
+    [steer_east] v = 0 -> 0.8: (v'=2) + 0.08: (v'=1) + 0.08: (v'=3) + 0.04: (v'=4);
+    [steer_south] v = 0 -> 0.8: (v'=3) + 0.08: (v'=4) + 0.08: (v'=2) + 0.04: (v'=1);
+    [steer_west] v = 0 -> 0.8: (v'=4) + 0.08: (v'=1) + 0.08: (v'=3) + 0.04: (v'=2);
+
+    [north] s != 13 & v = 1 -> (v'=0);
+    [east] s != 13 & v = 2 -> (v'=0);
+    [south] s != 13 & v = 3 -> (v'=0);
+    [west] s != 13 & v = 4 -> (v'=0);
+    [done] v != 0 -> (v'=0);
+
+endmodule
+
+module strategy
+	pick : [0..4] init 0;
+	mem : [0..1] init 0;
+	[] v = 0 & pick = 0 & mem = 0 & o = 1 -> (mem'=M_0_1) & (pick'=P_0_1);
+	[] v = 0 & pick = 0 & mem = 0 & o = 2 -> (mem'=M_0_2) & (pick'=P_0_2);
+	[] v = 0 &  pick = 0 & mem = 0 & o = 3 -> (mem'=M_0_3) & (pick'=P_0_3);
+	[] v = 0 & pick = 0 & mem = 0 & o = 4 -> (mem'=M_0_4) & (pick'=P_0_4);
+	[] v = 0 & pick = 0 & mem = 0 & o = 5 -> (mem'=M_0_5) & (pick'=P_0_5);
+	[] v = 0 & pick = 0 & mem = 0 & o = 6 -> (mem'=M_0_6) & (pick'=P_0_6);
+	[] v = 0 & pick = 0 & mem = 1 & o = 1 -> (mem'=M_1_1) & (pick'=P_1_1);
+	[] v = 0 & pick = 0 & mem = 1 & o = 2 -> (mem'=M_1_2) & (pick'=P_1_2);
+	[] v = 0 & pick = 0 & mem = 1 & o = 3 -> (mem'=M_1_3) & (pick'=P_1_3);
+	[] v = 0 & pick = 0 & mem = 1 & o = 4 -> (mem'=M_1_4) & (pick'=P_1_4);
+	[] v = 0 & pick = 0 & mem = 1 & o = 5 -> (mem'=M_1_5) & (pick'=P_1_5);
+	[] v = 0 & pick = 0 & mem = 1 & o = 6 -> (mem'=M_1_6) & (pick'=P_1_6);
+	[steer_north] pick=1 -> (pick'=0);
+	[steer_east] pick=2 -> (pick'=0);
+	[steer_south] pick=3 -> (pick'=0);
+	[steer_west] pick=4 -> (pick'=0);
+endmodule
+
+
+
+module maze
+
+	s : [-1..13];
+	o : [0..7];
+
+	// initialisation
+	[] s=-1 -> 1/13 : (s'=0) & (o'=1)
+			 + 1/13 : (s'=1) & (o'=2)
+			 + 1/13 : (s'=2) & (o'=3)
+			 + 1/13 : (s'=3) & (o'=2)
+			 + 1/13 : (s'=4) & (o'=4)
+			 + 1/13 : (s'=5) & (o'=5)
+			 + 1/13 : (s'=6) & (o'=5)
+			 + 1/13 : (s'=7) & (o'=5)
+			 + 1/13 : (s'=8) & (o'=5)
+			 + 1/13 : (s'=9) & (o'=5)
+			 + 1/13 : (s'=10) & (o'=5)
+			 + 1/13 : (s'=11) & (o'=6)
+			 + 1/13 : (s'=12) & (o'=6);
+
+	// moving around the maze
+
+	[east] s=0 -> (s'=1) & (o'=2);
+	[west] s=0 -> (s'=0);
+	[north] s=0 -> (s'=0);
+	[south] s=0 -> (s'=5) & (o'=5);
+
+	[east] s=1 -> (s'=2) & (o'=3);
+	[west] s=1 -> (s'=0) & (o'=1);
+	[north] s=1 -> (s'=1);
+	[south] s=1 -> (s'=1);
+
+	[east] s=2 -> (s'=3) & (o'=2);
+	[west] s=2 -> (s'=1) & (o'=2);
+	[north] s=2 -> (s'=2);
+	[south] s=2 -> (s'=6) & (o'=5);
+
+	[east] s=3 -> (s'=4) & (o'=4);
+	[west] s=3 -> (s'=2) & (o'=3);
+	[north] s=3 -> (s'=3);
+	[south] s=3 -> (s'=3);
+
+	[east] s=4 -> (s'=4);
+	[west] s=4 -> (s'=3) & (o'=2);
+	[north] s=4 -> (s'=4);
+	[south] s=4 -> (s'=7) & (o'=5);
+
+	[east] s=5 -> (s'=5);
+	[west] s=5 -> (s'=5);
+	[north] s=5 -> (s'=0) & (o'=1);
+	[south] s=5 -> (s'=8);
+
+	[east] s=6 -> (s'=6);
+	[west] s=6 -> (s'=6);
+	[north] s=6 -> (s'=2) & (o'=3);
+	[south] s=6 -> (s'=9);
+
+	[east] s=7 -> (s'=7);
+	[west] s=7 -> (s'=7);
+	[north] s=7 -> (s'=4) & (o'=4);
+	[south] s=7 -> (s'=10);
+
+	[east] s=8 -> (s'=8);
+	[west] s=8 -> (s'=8);
+	[north] s=8 -> (s'=5);
+	[south] s=8 -> (s'=11) & (o'=6);
+
+	[east] s=9 -> (s'=9);
+	[west] s=9 -> (s'=9);
+	[north] s=9 -> (s'=6);
+	[south] s=9 -> (s'=13) & (o'=6);
+
+	[east] s=10 -> (s'=10);
+	[west] s=10 -> (s'=10);
+	[north] s=10 -> (s'=7);
+	[south] s=10 -> (s'=12) & (o'=6);
+
+	[east] s=11 -> (s'=11);
+	[west] s=11 -> (s'=11);
+	[north] s=11 -> (s'=8) & (o'=5);
+	[south] s=11 -> (s'=11);
+
+	[east] s=12 -> (s'=12);
+	[west] s=12 -> (s'=12);
+	[north] s=12 -> (s'=10) & (o'=5);
+	[south] s=12 -> (s'=12);
+
+	// loop when we reach the target
+	[done] s=13 -> true;
+
+endmodule
+
+module counter
+    c : [0..CMAX] init 0;
+    [east] true -> (c'=min(CMAX, c+1));
+    [west] true -> (c'=min(CMAX, c+1));
+    [north] true -> (c'=min(CMAX, c+1));
+    [south] true -> (c'=min(CMAX, c+1));
+
+endmodule
+
+// reward structure (number of steps to reach the target)
+rewards "steps"
+
+	[east] true : 1;
+	[west] true : 1;
+	[north] true : 1;
+	[south] true : 1;
+
+endrewards
+
+// target observation
+label "goal" = s=13;
+label "traps" = s=11 | s=12;

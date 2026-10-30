@@ -1,0 +1,217 @@
+# Benchmarks of tests/performance/run.py. project is a folder of models/performance-test, args are passed to paynt
+# (or to build.py when build = true), expected is the result paynt must report. deterministic = false marks the cases
+# whose search depends on timing (Hybrid, dtnest): their iterations and result vary from run to run.
+
+# the true optimum is 9100.064279 (CEGIS), AR prunes it away: expect it once that AR bug is fixed
+[[case]]
+name = "ar-dpm-demo"
+project = "dpm-demo"
+args = ["--method", "ar"]
+expected = "optimum: 9197.776289"
+
+[[case]]
+name = "ar-dpm-demo-requests"
+project = "dpm-demo-jair24"
+args = ["--props", "requests.props", "--method", "ar"]
+expected = "optimum: 713.272961"
+
+[[case]]
+name = "ar-grid-easy"
+project = "grid"
+args = ["--props", "easy.props", "--method", "ar"]
+expected = "feasible: no"
+
+[[case]]
+name = "ar-grid-jair24"
+project = "grid-jair24"
+args = ["--method", "ar"]
+expected = "optimum: 0.926768"
+
+[[case]]
+name = "cegis-grid-easy"
+project = "grid"
+args = ["--props", "easy.props", "--method", "cegis"]
+expected = "feasible: no"
+
+[[case]]
+name = "cegis-kydie"
+project = "kydie"
+args = ["--method", "cegis"]
+expected = "optimum: 3.666667"
+
+[[case]]
+name = "cegis-herman-custom"
+project = "herman-custom"
+args = ["--method", "cegis"]
+expected = "optimum: 18.193061"
+
+[[case]]
+name = "hybrid-grid-easy"
+project = "grid"
+args = ["--props", "easy.props", "--method", "hybrid"]
+expected = "feasible: no"
+deterministic = false
+
+# the same AR bug as in ar-dpm-demo
+[[case]]
+name = "hybrid-dpm-demo"
+project = "dpm-demo"
+args = ["--method", "hybrid"]
+expected = "optimum: 9197.776289"
+deterministic = false
+
+[[case]]
+name = "hybrid-herman-custom"
+project = "herman-custom"
+args = ["--method", "hybrid"]
+expected = "optimum: 18.193061"
+deterministic = false
+
+[[case]]
+name = "smpmc-grid-easy"
+project = "grid"
+args = ["--props", "easy.props", "--method", "smpmc"]
+expected = "feasible: no"
+
+[[case]]
+name = "smpmc-grid-jair24"
+project = "grid-jair24"
+args = ["--method", "smpmc"]
+expected = "optimum: 0.926742"
+
+[[case]]
+name = "smpmc-maze-jair24"
+project = "maze-jair24"
+args = ["--method", "smpmc"]
+expected = "optimum: 8.133857"
+
+[[case]]
+name = "pomdp-4x3-95-mem3"
+project = "4x3-95"
+args = ["--fsc-memory-size", "3"]
+expected = "optimum: 1.749871"
+
+[[case]]
+name = "pomdp-milos-aaai97-mem1"
+project = "milos-aaai97"
+args = ["--fsc-memory-size", "1"]
+expected = "optimum: 29.475597"
+
+[[case]]
+name = "pomdp-grid-avoid-4-0-mem5"
+project = "grid-avoid-4-0"
+args = ["--fsc-memory-size", "5"]
+expected = "optimum: 0.928571"
+
+[[case]]
+name = "pomdp-maze-slip-mem3"
+project = "maze-slip"
+args = ["--fsc-memory-size", "3"]
+expected = "optimum: 7.372105"
+
+[[case]]
+name = "policytree-dpm-switch-q10"
+project = "dpm-switch-q10"
+expected = "satisfied 2670/14580 members"
+
+[[case]]
+name = "policytree-obstacles-8-6-skip"
+project = "obstacles-8-6-skip"
+expected = "satisfied 42120/46656 members"
+
+[[case]]
+name = "policytree-uav-roz"
+project = "uav-roz"
+expected = "satisfied 4451/4500 members"
+
+[[case]]
+name = "robust-obstacles-10-6-skip-easy"
+project = "obstacles-10-6-skip-easy"
+args = ["--method", "smpmc", "--constraint", "exists_forall"]
+expected = "feasible: no"
+
+[[case]]
+name = "robust-obstacles-10-9-pull"
+project = "obstacles-10-9-pull"
+args = ["--method", "smpmc", "--constraint", "exists_forall"]
+expected = "feasible: no"
+
+[[case]]
+name = "robust-dpm-switch-q10"
+project = "dpm-switch-q10"
+args = ["--method", "smpmc", "--constraint", "exists_forall"]
+expected = "feasible: no"
+
+[[case]]
+name = "robust-rover-1000"
+project = "rover-1000"
+args = ["--method", "smpmc", "--constraint", "exists_forall"]
+expected = "feasible: no"
+
+[[case]]
+name = "dt-maze-depth2"
+project = "maze-mdp"
+args = ["--tree-depth", "2"]
+expected = "the synthesized tree has value 20.948148711838865"
+
+[[case]]
+name = "dt-frozenlake-8x8-depth2"
+project = "frozenlake-8x8"
+args = ["--sketch", "model-random.drn", "--props", "discounted.props", "--tree-depth", "2"]
+expected = "the synthesized tree has value 0.3870117876374776"
+
+[[case]]
+name = "dt-resource-gathering-5-depth1"
+project = "resource-gathering-5"
+args = ["--sketch", "model-random.drn", "--props", "discounted.props", "--tree-depth", "1"]
+expected = "the synthesized tree has value -95.13921708639764"
+
+[[case]]
+name = "dt-maze-steps-depth1"
+project = "maze-steps"
+args = ["--sketch", "model-random.drn", "--props", "discounted.props", "--tree-depth", "1"]
+expected = "the synthesized tree has value -63.22480497099268"
+
+[[case]]
+name = "dtnest-frozenlake-8x8"
+project = "frozenlake-8x8"
+args = ["--sketch", "model-random.drn", "--props", "discounted.props", "--dtnest"]
+deterministic = false
+
+[[case]]
+name = "dtnest-resource-gathering-5"
+project = "resource-gathering-5"
+args = ["--sketch", "model-random.drn", "--props", "discounted.props", "--dtnest"]
+deterministic = false
+
+[[case]]
+name = "dtnest-traffic-intersection"
+project = "traffic-intersection"
+args = ["--sketch", "model-random.drn", "--props", "discounted.props", "--dtnest"]
+deterministic = false
+
+[[case]]
+name = "build-network-prio-2-8-20-mem4"
+project = "network-prio-2-8-20"
+args = ["--fsc-memory-size", "4"]
+build = true
+expected = "built: 77489 states, 546500 choices, 28693 parameters"
+
+[[case]]
+name = "build-rocks-12-mem4"
+project = "rocks-12"
+args = ["--fsc-memory-size", "4"]
+build = true
+expected = "built: 26209 states, 507908 choices, 12841 parameters"
+
+[[case]]
+name = "build-uav-roz"
+project = "uav-roz"
+build = true
+expected = "built: 17927 states, 191629 choices, 4 parameters"
+
+[[case]]
+name = "build-rover-1000"
+project = "rover-1000"
+build = true
+expected = "built: 17003 states, 518003 choices, 10 parameters"

@@ -1,0 +1,2 @@
+R{"requests_lost"} <= 1 [ F "finished" ]
+R{"power"}min=? [ F "finished" ]

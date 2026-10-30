@@ -9,6 +9,13 @@ venv/
 .idea
 .claude/settings.local.json
 
+# test reports
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+mutants/
+
 # OSX
 .DS_Store
 

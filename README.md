@@ -349,17 +349,41 @@ python3 -m paynt models/archive/cav21-paynt/grid --props easy.props --method one
 might take up to 20 minutes.
 
 ## Testing PAYNT
-As reported in the paper, PAYNT is tested with unit tests and regression tests.
-These tests currently cover more than 90% of the source code lines.
-The unit tests which cover the specific logic components to maintain their correct functionality.
-You can run the regression and unit tests (~5 minutes) with the following sequence of commands:
+The test dependencies are an optional extra, they are not installed with PAYNT itself.
+From the root of the repository:
 
 ```shell
-cd paynt/paynt_tests
-python3 -m pytest --cov=./../paynt/ --cov-report term-missing test_synthesis.py test_model_checking.py
+pip install ".[test]"
+pytest tests                    # PAYNT tests
+(cd payntbind && pytest tests)  # payntbind tests, run separately
 ```
-This command prints the coverage report, displaying the resulting coverage for individual source files.
-Our tests currently cover more than `90%` of the source code lines, even though the result shows `82%` because `~10%` of the source code is only temporary functions for debugging purposes that have no functionality.
+
+Useful options:
+- `-n auto` runs the tests in parallel.
+- `--cov --cov-report=html` measures line and branch coverage of `paynt/`, including the runs of the command line in subprocesses, and writes the report to `htmlcov/`.
+  Add `--cov-context=test` to see in the report which tests run each line.
+- `-p randomly` runs the tests in random order, to find tests that depend on each other.
+
+CI measures the coverage in the Release job on latest Storm, shows it in the job summary and uploads the HTML report as an artifact.
+
+We also include mutation testing. It is slow, so run it on one package at a time:
+
+```shell
+pip install ".[mutation]"
+mutmut run "paynt.parameter_space.*"
+mutmut results               # the changes no test noticed
+mutmut show <name>           # the diff of one of them
+```
+
+The first run takes about half an hour, since it runs all tests once to learn which tests reach which function; later runs reuse that and take minutes.
+Not every surviving change is a missing test: some only change the speed of the search or the statistics that are printed.
+
+We also have performance tests. `tests/performance/cases.toml` lists larger benchmarks (their models are in `models/performance-test/`), and `tests/performance/run.py` runs them and records the time, the peak memory, the number of iterations and the result of each.
+To run some of them locally:
+
+```shell
+python tests/performance/run.py --only "ar-*"
+```
 
 
 ---

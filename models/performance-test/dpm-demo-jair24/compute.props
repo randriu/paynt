@@ -1,0 +1,9 @@
+//R{"time"}min=? [ F "finished" ];
+//R{"requests"}min=? [ F "finished" ];
+//R{"served"}min=? [ F "finished" ];
+//R{"requests_lost"}min=? [ F "finished" ];
+//R{"power"}min=? [ F "finished" ];
+//R{"idle_steps"}min=? [ F "finished" ];
+//R{"sleep_steps"}min=? [ F "finished" ];
+//R{"active_steps"}min=? [ F "finished" ];
+R{"idle_active_steps"}min=? [ F "finished" ];

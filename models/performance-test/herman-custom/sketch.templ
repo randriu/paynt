@@ -1,0 +1,100 @@
+// herman's self stabilising algorithm [Her90]
+// gxn/dxp 13/07/02
+
+// the procotol is synchronous with no nondeterminism (a DTMC)
+dtmc
+
+const int MAXMEM = 1;
+
+const double P_START=0;
+
+module initialise
+    start : [0..1] init 0;
+    [go] start = 0 -> (start'=1);
+    [step1] start = 1 -> true;
+endmodule
+
+// full step counter
+rewards "steps"
+    round = 0 : 1;
+endrewards
+
+// label - stable configurations (1 token)
+label "stable" = round =1 & num_tokens=1;
+
+const double P_STEP=0.01;
+
+hole int M0LFAIR in {0,1,2,3,4};
+hole int M0HFAIR in {0,1,2,3,4};
+hole int M1LFAIR in {0,1,2,3,4};
+hole int M1HFAIR in {0,1,2,3,4};
+hole int MxxA in {0,1};
+hole int MxxB in {0,1};
+hole int MxxC in {0,1};
+
+const int STATIONS = 5;
+
+module controller
+	round : [0..STATIONS] init 1;
+
+	[sync] round = 0 -> (round'=1);
+	[step1] round = 1 -> (round'=2);
+	[step2] round = 2 -> (round'=3);
+	[step3] round = 3 -> (round'=4);
+	[step4] round = 4 -> (round'=5);
+	[step5] round = STATIONS -> (round'=0);
+
+endmodule
+
+
+formula num_tokens = (x1=x2?1:0)+(x2=x3?1:0)+(x3=x4?1:0)+(x4=x5?1:0)+(x5=x1?1:0);
+
+const double p0 = P_START;
+const double p1 = p0+P_STEP;
+const double p2 = p1+P_STEP;
+const double p3 = p2+P_STEP;
+const double p4 = p3+P_STEP;
+const double p5 = p4+P_STEP;
+
+module process1
+
+	 x1 : [0..1] init 0;
+	 y1 : [0..1] init 0;
+	 m1 : [0..1] init 0;
+
+	[go] true -> 1: (x1'=1);
+
+	[step1]  (x1=x5) & m1 = 0 & x1 = 0 & M0LFAIR=0 -> p0 : (y1'=0) & (m1'=MxxA) + 1-p0 : (y1'=1) & (m1'=MxxB);
+	[step1]  (x1=x5) & m1 = 0 & x1 = 0 & M0LFAIR=1 -> p1 : (y1'=0) & (m1'=MxxA) + 1-p1 : (y1'=1) & (m1'=MxxB);
+	[step1]  (x1=x5) & m1 = 0 & x1 = 0 & M0LFAIR=2 -> p2 : (y1'=0) & (m1'=MxxA) + 1-p2 : (y1'=1) & (m1'=MxxB);
+	[step1]  (x1=x5) & m1 = 0 & x1 = 0 & M0LFAIR=3 -> p3 : (y1'=0) & (m1'=MxxA) + 1-p3 : (y1'=1) & (m1'=MxxB);
+	[step1]  (x1=x5) & m1 = 0 & x1 = 0 & M0LFAIR=4 -> p4 : (y1'=0) & (m1'=MxxA) + 1-p4 : (y1'=1) & (m1'=MxxB);
+	[step1]  (x1=x5) & m1 = 0 & x1 = 1 & M0HFAIR=0 -> p0 : (y1'=0) & (m1'=MxxA) + 1-p0 : (y1'=1) & (m1'=MxxB);
+	[step1]  (x1=x5) & m1 = 0 & x1 = 1 & M0HFAIR=1 -> p1 : (y1'=0) & (m1'=MxxA) + 1-p1 : (y1'=1) & (m1'=MxxB);
+	[step1]  (x1=x5) & m1 = 0 & x1 = 1 & M0HFAIR=2 -> p2 : (y1'=0) & (m1'=MxxA) + 1-p2 : (y1'=1) & (m1'=MxxB);
+	[step1]  (x1=x5) & m1 = 0 & x1 = 1 & M0HFAIR=3 -> p3 : (y1'=0) & (m1'=MxxA) + 1-p3 : (y1'=1) & (m1'=MxxB);
+	[step1]  (x1=x5) & m1 = 0 & x1 = 1 & M0HFAIR=4 -> p4 : (y1'=0) & (m1'=MxxA) + 1-p4 : (y1'=1) & (m1'=MxxB);
+	[step1]  (x1=x5) & m1 = 1 & x1 = 0 & M1LFAIR=0 -> p0 : (y1'=0) & (m1'=MxxA) + 1-p0 : (y1'=1) & (m1'=MxxB);
+	[step1]  (x1=x5) & m1 = 1 & x1 = 0 & M1LFAIR=1 -> p1 : (y1'=0) & (m1'=MxxA) + 1-p1 : (y1'=1) & (m1'=MxxB);
+	[step1]  (x1=x5) & m1 = 1 & x1 = 0 & M1LFAIR=2 -> p2 : (y1'=0) & (m1'=MxxA) + 1-p2 : (y1'=1) & (m1'=MxxB);
+	[step1]  (x1=x5) & m1 = 1 & x1 = 0 & M1LFAIR=3 -> p3 : (y1'=0) & (m1'=MxxA) + 1-p3 : (y1'=1) & (m1'=MxxB);
+	[step1]  (x1=x5) & m1 = 1 & x1 = 0 & M1LFAIR=4 -> p4 : (y1'=0) & (m1'=MxxA) + 1-p4 : (y1'=1) & (m1'=MxxB);
+	[step1]  (x1=x5) & m1 = 1 & x1 = 1 & M1HFAIR=0 -> p0 : (y1'=0) & (m1'=MxxA) + 1-p0 : (y1'=1) & (m1'=MxxB);
+	[step1]  (x1=x5) & m1 = 1 & x1 = 1 & M1HFAIR=1 -> p1 : (y1'=0) & (m1'=MxxA) + 1-p1 : (y1'=1) & (m1'=MxxB);
+	[step1]  (x1=x5) & m1 = 1 & x1 = 1 & M1HFAIR=2 -> p2 : (y1'=0) & (m1'=MxxA) + 1-p2 : (y1'=1) & (m1'=MxxB);
+	[step1]  (x1=x5) & m1 = 1 & x1 = 1 & M1HFAIR=3 -> p3 : (y1'=0) & (m1'=MxxA) + 1-p3 : (y1'=1) & (m1'=MxxB);
+	[step1]  (x1=x5) & m1 = 1 & x1 = 1 & M1HFAIR=4 -> p4 : (y1'=0) & (m1'=MxxA) + 1-p4 : (y1'=1) & (m1'=MxxB);
+
+	[step1] !(x1=x5) & m1 = 0 & x1 = 0 -> (y1'=x5) & (m1'=MxxC);
+	[step1] !(x1=x5) & m1 = 0 & x1 = 1 -> (y1'=x5) & (m1'=MxxC);
+	[step1] !(x1=x5) & m1 = 1 & x1 = 0 -> (y1'=x5) & (m1'=MxxC);
+	[step1] !(x1=x5) & m1 = 1 & x1 = 1 -> (y1'=x5) & (m1'=MxxC);
+
+	[sync] true -> (x1' = y1) & (y1' = 0);
+
+endmodule
+
+module process2 = process1 [ x1=x2, y1=y2, x5=x1, m1=m2, step1=step2 ] endmodule
+module process3 = process1 [ x1=x3, y1=y3, x5=x2, m1=m3, step1=step3 ] endmodule
+module process4 = process1 [ x1=x4, y1=y4, x5=x3, m1=m4, step1=step4 ] endmodule
+module process5 = process1 [ x1=x5, y1=y5, x5=x4, m1=m5, step1=step5 ] endmodule

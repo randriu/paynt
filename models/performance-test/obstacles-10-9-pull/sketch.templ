@@ -1,0 +1,113 @@
+mdp
+
+const int N = 10;
+const int xMIN = 1;
+const int yMIN = 1;
+const int xMAX = N;
+const int yMAX = N;
+
+hole int o1x in {1..3};
+hole int o1y in {1..3};
+
+hole int o2x in {1..3};
+hole int o2y in {4..6};
+
+hole int o3x in {1..3};
+hole int o3y in {7..9};
+
+hole int o4x in {4..6};
+hole int o4y in {1..3};
+
+hole int o5x in {4..6};
+hole int o5y in {4..6};
+
+hole int o6x in {4..6};
+hole int o6y in {7..9};
+
+hole int o7x in {7..9};
+hole int o7y in {1..3};
+
+hole int o8x in {7..9};
+hole int o8y in {4..6};
+
+hole int o9x in {7..9};
+hole int o9y in {7..9};
+
+formula at1 = (x = o1x & y = o1y);
+formula at2 = (x = o2x & y = o2y);
+formula at3 = (x = o3x & y = o3y);
+formula at4 = (x = o4x & y = o4y);
+formula at5 = (x = o5x & y = o5y);
+formula at6 = (x = o6x & y = o6y);
+formula at7 = (x = o7x & y = o7y);
+formula at8 = (x = o8x & y = o8y);
+formula at9 = (x = o9x & y = o9y);
+
+formula near1 = o1x_MIN<=x & x<=o1x_MAX & o1y_MIN<=y & y<=o1y_MAX;
+formula near2 = o2x_MIN<=x & x<=o2x_MAX & o2y_MIN<=y & y<=o2y_MAX;
+formula near3 = o3x_MIN<=x & x<=o3x_MAX & o3y_MIN<=y & y<=o3y_MAX;
+formula near4 = o4x_MIN<=x & x<=o4x_MAX & o4y_MIN<=y & y<=o4y_MAX;
+formula near5 = o5x_MIN<=x & x<=o5x_MAX & o5y_MIN<=y & y<=o5y_MAX;
+formula near6 = o6x_MIN<=x & x<=o6x_MAX & o6y_MIN<=y & y<=o6y_MAX;
+formula near7 = o7x_MIN<=x & x<=o7x_MAX & o7y_MIN<=y & y<=o7y_MAX;
+formula near8 = o8x_MIN<=x & x<=o8x_MAX & o8y_MIN<=y & y<=o8y_MAX;
+formula near9 = o9x_MIN<=x & x<=o9x_MAX & o9y_MIN<=y & y<=o9y_MAX;
+
+const NUM_OBS = 9;
+formula crash = visit1 | visit2 | visit3 | visit4 | visit5 | visit6 | visit7 | visit8 | visit9;
+formula goal = (x=xMAX & y=yMAX);
+formula done = goal | crash;
+
+
+formula clk_next = mod(clk+1,NUM_OBS+1);
+module clk
+    clk : [0..NUM_OBS] init 0;
+
+    [left]  !done & clk=0 -> (clk'=clk_next);
+    [right] !done & clk=0 -> (clk'=clk_next);
+    [down]  !done & clk=0 -> (clk'=clk_next);
+    [up]    !done & clk=0 -> (clk'=clk_next);
+    
+    [detect1] !done & clk=1 -> (clk'=clk_next);
+    [detect2] !done & clk=2 -> (clk'=clk_next);
+    [detect3] !done & clk=3 -> (clk'=clk_next);
+    [detect4] !done & clk=4 -> (clk'=clk_next);
+    [detect5] !done & clk=5 -> (clk'=clk_next);
+    [detect6] !done & clk=6 -> (clk'=clk_next);
+    [detect7] !done & clk=7 -> (clk'=clk_next);
+    [detect8] !done & clk=8 -> (clk'=clk_next);
+    [detect9] !done & clk=9 -> (clk'=clk_next);
+endmodule
+
+
+const double slip = 0.2;
+
+formula xright  = min(x+1,xMAX);
+formula xleft   = max(x-1,xMIN);
+formula yup     = min(y+1,yMAX);
+formula ydown   = max(y-1,yMIN);
+
+module agent
+    x : [xMIN..xMAX] init xMIN;
+    y : [yMIN..yMAX] init yMIN;
+
+    [left]  true -> 1-slip : (x'=xleft)  + slip : (y'=ydown);
+    [right] true -> 1-slip : (x'=xright) + slip : (y'=yup);
+    [down]  true -> 1-slip : (y'=ydown)  + slip : (x'=xright);
+    [up]    true -> 1-slip : (y'=yup)    + slip : (x'=xleft);
+endmodule
+
+module visit1
+    visit1 : bool init false;
+    [detect1] !near1 -> true;
+    [detect1]  near1 -> (visit1'=at1);
+endmodule
+
+module visit2=visit1[visit1=visit2,detect1=detect2,near1=near2,at1=at2] endmodule
+module visit3=visit1[visit1=visit3,detect1=detect3,near1=near3,at1=at3] endmodule
+module visit4=visit1[visit1=visit4,detect1=detect4,near1=near4,at1=at4] endmodule
+module visit5=visit1[visit1=visit5,detect1=detect5,near1=near5,at1=at5] endmodule
+module visit6=visit1[visit1=visit6,detect1=detect6,near1=near6,at1=at6] endmodule
+module visit7=visit1[visit1=visit7,detect1=detect7,near1=near7,at1=at7] endmodule
+module visit8=visit1[visit1=visit8,detect1=detect8,near1=near8,at1=at8] endmodule
+module visit9=visit1[visit1=visit9,detect1=detect9,near1=near9,at1=at9] endmodule

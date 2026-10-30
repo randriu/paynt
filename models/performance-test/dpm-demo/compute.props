@@ -1,0 +1,5 @@
+R{"time"}min=? [ F "finished" ];
+R{"requests"}min=? [ F "finished" ];
+R{"served"}min=? [ F "finished" ];
+R{"lost"}min=? [ F "finished" ];
+R{"power"}min=? [ F "finished" ];

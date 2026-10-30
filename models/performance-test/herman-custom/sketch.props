@@ -1,0 +1,2 @@
+//R{"steps"}<=THRESHOLD [F "stable"]
+R{"steps"}min=? [F "stable"]
