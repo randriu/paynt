@@ -1,0 +1,29 @@
+// The trip of sketch.templ as an MDP, for decision trees: a tree of depth 0 drives both stages at one speed (or picks the speed at random, the don't-care
+// action), so the trip takes 2, 4 or 6 hours and 8 minus that in energy.
+//
+// tree.props, time <= 3 and energy <= 5, needs different speeds for the two stages: no tree of depth 0 satisfies it, a tree of depth 1 that drives
+// one stage fast and the other at medium speed or at random does (3 hours, 5 units). tree-optimality.props asks for the least energy of a trip of at
+// most 4 hours: 4 units, at medium speed or at random.
+mdp
+
+module trip
+    s : [0..2] init 0;    // 0: first stage, 1: second stage, 2: arrived
+    [fast]   s<2 -> (s'=s+1);
+    [medium] s<2 -> (s'=s+1);
+    [slow]   s<2 -> (s'=s+1);
+    [] s=2 -> true;
+endmodule
+
+label "arrived" = s=2;
+
+rewards "time"
+    [fast] true : 1;
+    [medium] true : 2;
+    [slow] true : 3;
+endrewards
+
+rewards "energy"
+    [fast] true : 3;
+    [medium] true : 2;
+    [slow] true : 1;
+endrewards

@@ -221,7 +221,7 @@ class TestGeneralColoringEngines:
 
     @pytest.mark.parametrize(("bound", "satisfiable"), [(9.7, True), (9.6, False)])
     def test_the_verdict_on_a_threshold_on_the_time(self, tmp_path, method, bound, satisfiable):
-        """The best threshold takes 9.644...: 9.7 can be met, 9.6 not."""
+        """BEST_THRESHOLD, solved with numpy above, is 9.644: 9.7 can be met, 9.6 not."""
         colored_mdp, task, _coloring = threshold_colored_mdp(tmp_path, f'R{{"time"}}<={bound} [F "goal"]')
         assert paynt.synthesizer.synthesizer.Synthesizer.for_method(colored_mdp, task, method).run().success is satisfiable
 

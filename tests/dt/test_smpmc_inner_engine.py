@@ -1,8 +1,9 @@
 """SynthesizerSMPMC as DtSynthesizer's inner engine (over the tree's ColoringGeneral), instead of the default SynthesizerARDt (over ColoringSmt); see
 paynt.dt._utils and DtColoredMdpFactory.reset_tree.
 
-Depth 0 is compared against SynthesizerARDt directly. Deeper trees are compared against optima pinned from SynthesizerARDt over ColoringSmt, an independent
-engine; they are feasible for SMPMC thanks to conflicts minimized with ColoringGeneral.relevantParameters.
+Depth 0 is compared against SynthesizerARDt directly; its optimum on dt-orchard, 0.4845..., is pinned in test_dt_synthesizer.py too. Deeper trees are compared
+against optima pinned from SynthesizerARDt over ColoringSmt, an independent engine; they are feasible for SMPMC thanks to conflicts minimized with
+ColoringGeneral.relevantParameters.
 """
 
 from __future__ import annotations
@@ -28,31 +29,40 @@ import paynt.utils.timer
 from tests.helpers.models import get_sketch_paths, load_sketch
 
 PROJECTS = ["tests/dt-orchard", "tests/dt-maze"]
+INNER_ENGINES = {"ar": paynt.dt.synthesizer_ar_dt.SynthesizerARDt, "smpmc": paynt.synthesizer.smpmc.SynthesizerSMPMC}
+
+
+@pytest.fixture
+def inner_engines(monkeypatch):
+    """The inner engines that DtSynthesizer builds, in order."""
+    built = []
+
+    def make_and_record(method, colored_mdp, task):
+        synthesizer = paynt.dt._utils.make_inner_synthesizer(method, colored_mdp, task)
+        built.append(synthesizer)
+        return synthesizer
+
+    monkeypatch.setattr(paynt.dt.synthesizer, "make_inner_synthesizer", make_and_record)
+    return built
+
+
+def only_smpmc(engines):
+    return len(engines) > 0 and all(isinstance(engine, paynt.synthesizer.smpmc.SynthesizerSMPMC) for engine in engines)
 
 
 @pytest.mark.parametrize("project", PROJECTS)
 class TestSmpmcInnerEngineMatchesArDtAtDepthZero:
-    def test_synthesize_tree_reaches_the_same_optimum(self, project):
+    def test_synthesize_tree_reaches_the_same_optimum(self, project, inner_engines):
         factory, task = load_sketch(project)
         smpmc_synth = paynt.dt.synthesizer.DtSynthesizer(factory, task, method="smpmc")
         smpmc_synth.synthesize_tree(0)
+        assert only_smpmc(inner_engines)
 
         factory_ar, task_ar = load_sketch(project)
         ar_synth = paynt.dt.synthesizer.DtSynthesizer(factory_ar, task_ar, method="ar")
         ar_synth.synthesize_tree(0)
 
         assert smpmc_synth.best_tree is not None
-        assert smpmc_synth.best_tree_value == pytest.approx(ar_synth.best_tree_value, abs=1e-6)
-
-    def test_synthesize_tree_sequence_reaches_the_same_optimum(self, project):
-        factory, task = load_sketch(project)
-        smpmc_synth = paynt.dt.synthesizer.DtSynthesizer(factory, task, method="smpmc")
-        smpmc_synth.synthesize_tree_sequence(opt_result_value=0.0, overall_timeout=20, max_depth=1)
-
-        factory_ar, task_ar = load_sketch(project)
-        ar_synth = paynt.dt.synthesizer.DtSynthesizer(factory_ar, task_ar, method="ar")
-        ar_synth.synthesize_tree_sequence(opt_result_value=0.0, overall_timeout=20, max_depth=1)
-
         assert smpmc_synth.best_tree_value == pytest.approx(ar_synth.best_tree_value, abs=1e-6)
 
 
@@ -112,10 +122,11 @@ class TestSmpmcOnDeeperTrees:
             ("tests/dt-maze", 2, 20.948148711838865),
         ],
     )
-    def test_reaches_the_optimum(self, project, depth, optimum):
+    def test_reaches_the_optimum(self, project, depth, optimum, inner_engines):
         factory, task = load_sketch(project)
         synthesizer = paynt.dt.synthesizer.DtSynthesizer(factory, task, method="smpmc")
         synthesizer.synthesize_tree(depth, timeout=120)
+        assert only_smpmc(inner_engines)
         assert synthesizer.best_tree is not None
         assert synthesizer.best_tree_value == pytest.approx(optimum, rel=1e-9)
 
@@ -124,10 +135,11 @@ class TestTreeSequenceOnDeeperTrees:
     """synthesize_tree_sequence tries every depth up to max_depth - 1, each seeded with the best tree of the depths before: the search runs on the subspace
     that hint describes first and on the whole space after, which depth 0 never does."""
 
-    def test_the_depth_2_optimum_of_the_maze_is_reached_through_the_shallower_depths(self):
+    def test_the_depth_2_optimum_of_the_maze_is_reached_through_the_shallower_depths(self, inner_engines):
         factory, task = load_sketch("tests/dt-maze")
         smpmc_synth = paynt.dt.synthesizer.DtSynthesizer(factory, task, method="smpmc")
         smpmc_synth.synthesize_tree_sequence(opt_result_value=0.0, overall_timeout=600, max_depth=3)
+        assert len(inner_engines) == 3 and only_smpmc(inner_engines)
         assert smpmc_synth.best_tree is not None
         assert smpmc_synth.best_tree.get_depth() == 2
         assert smpmc_synth.best_tree_value == pytest.approx(20.948148711838865, rel=1e-9)
@@ -153,18 +165,29 @@ class TestConstraintProperty:
     """
 
     @staticmethod
-    def synthesize(tmp_path, threshold, depth):
+    def synthesize(tmp_path, threshold, depth, method="smpmc"):
         props_path = tmp_path / "threshold.props"
         props_path.write_text(f"P>={threshold} [F goal]\n")
         sketch_path, _ = get_sketch_paths("tests/dt-orchard")
         factory, task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, str(props_path))
-        synthesizer = paynt.dt.synthesizer.DtSynthesizer(factory, task, method="smpmc")
+        synthesizer = paynt.dt.synthesizer.DtSynthesizer(factory, task, method=method)
         synthesizer.synthesize_tree(depth, timeout=600)
         return synthesizer, task
 
-    @pytest.mark.parametrize(("threshold", "depth", "satisfiable"), [(0.48, 0, True), (0.488, 0, False), (0.49, 0, False), (0.488, 1, True)])
-    def test_a_tree_is_found_exactly_when_the_threshold_is_reachable(self, tmp_path, threshold, depth, satisfiable):
-        synthesizer, task = self.synthesize(tmp_path, threshold, depth)
+    @pytest.mark.parametrize(
+        ("method", "threshold", "depth", "satisfiable"),
+        [
+            *[(method, *case) for method in INNER_ENGINES for case in [(0.48, 0, True), (0.488, 0, False), (0.49, 0, False), (0.488, 1, True)]],
+            # AR needs more than a minute for this one
+            ("smpmc", 0.4885, 1, False),
+        ],
+    )
+    def test_a_tree_is_found_exactly_when_the_threshold_is_reachable(self, tmp_path, method, threshold, depth, satisfiable, inner_engines):
+        synthesizer, _task = self.synthesize(tmp_path, threshold, depth, method)
+        [engine] = inner_engines
+        assert type(engine) is INNER_ENGINES[method]
+        # no tree because there is none, not because the time ran out
+        assert not engine.time_limit_reached()
         assert (synthesizer.best_tree is not None) is satisfiable
         # a constraint has no value to report, as for every other engine
         assert synthesizer.best_tree_value is None
@@ -188,12 +211,12 @@ class TestDtSynthesizerRun:
         monkeypatch.setattr(paynt.utils.timer.GlobalTimer, "global_timer", None)
         paynt.utils.timer.GlobalTimer.start(None)
 
-    @pytest.mark.parametrize("method", ["ar", "smpmc"])
-    def test_the_result_carries_the_tree_and_its_value(self, method):
-        sketch_path, props_path = get_sketch_paths("tests/dt-orchard")
+    @pytest.mark.parametrize("method", INNER_ENGINES)
+    def test_the_result_carries_the_tree_and_its_value(self, method, inner_engines):
         # the depth is a task option: a library call sets it explicitly, as the command line does with --tree-depth
-        factory, task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path, task_kwargs={"tree_depth": 0})
+        factory, task = load_sketch("tests/dt-orchard", task_kwargs={"tree_depth": 0})
         result = paynt.dt.synthesizer.DtSynthesizer(factory, task, method=method).run()
+        assert len(inner_engines) > 0 and all(type(built) is INNER_ENGINES[method] for built in inner_engines)
         assert isinstance(result, paynt.dt.result.DtResult)
         assert result.success
         assert result.value == pytest.approx(0.48450450140758644, rel=1e-9)
@@ -287,6 +310,7 @@ class TestMapScheduler:
         assert result.success
         assert result.tree.get_depth() == 3
         assert len(result.tree.collect_nonterminals()) == 5
+        # the optimum of the MDP, as the tree makes the choices of its optimal scheduler
         assert result.value == pytest.approx(6.889153192908649, rel=1e-6)
 
     @pytest.mark.parametrize(("project", "max_depth"), [("tests/dt-maze", 2), ("tests/dt-orchard", 2)])
@@ -304,9 +328,10 @@ class TestMapScheduler:
 
 
 class TestLibraryEntryPointTakesTheMethod:
-    def test_synthesizing_trees_through_paynt_dt_api_with_smpmc(self):
+    def test_synthesizing_trees_through_paynt_dt_api_with_smpmc(self, inner_engines):
         factory, task = load_sketch("tests/dt-maze")
         smpmc = paynt.dt.api.synthesize(factory, task, paynt.dt.task.DtTask(tree_depth=1), use_solver="dtpaynt", method="smpmc")
+        assert only_smpmc(inner_engines)
         factory, task = load_sketch("tests/dt-maze")
         ar = paynt.dt.api.synthesize(factory, task, paynt.dt.task.DtTask(tree_depth=1), use_solver="dtpaynt")
         assert smpmc.success and ar.success

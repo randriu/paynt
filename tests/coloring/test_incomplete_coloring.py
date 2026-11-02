@@ -126,7 +126,7 @@ class TestEnginesFindTheOptimum:
 
 @pytest.mark.parametrize(("kind", "method"), CASES)
 class TestEnginesDecideAThreshold:
-    """The optimum for x groups (0, 1, 3) is 10.792."""
+    """The optimum for x groups (0, 1, 3) is 10.792, by brute force (see TestEnginesFindTheOptimum)."""
 
     @pytest.mark.parametrize(("threshold", "satisfiable"), [(11, True), (10, False)])
     def test_the_verdict(self, kind, method, threshold, satisfiable, tmp_path):

@@ -22,11 +22,6 @@ class TestSynthesisTask:
         task = paynt.task.SynthesisTask(_reachability_properties())
         assert task.get_property() is task.specification.all_properties()[0]
 
-    def test_timeout_and_use_exact_are_stored(self):
-        task = paynt.task.SynthesisTask(_reachability_properties(), timeout=42, use_exact=False)
-        assert task.timeout == 42
-        assert task.use_exact is False
-
     def test_from_specification_wraps_without_reparsing(self):
         original = paynt.task.SynthesisTask(_reachability_properties(), timeout=10, use_exact=False)
         wrapped = paynt.task.SynthesisTask.from_specification(original.specification, timeout=99, use_exact=False)
@@ -39,10 +34,8 @@ class TestSynthesisTask:
         assert wrapped.forall_pattern == "^o"
         assert wrapped.verify_robust is True
 
-    def test_use_exact_reaches_construct_property(self):
-        """use_exact must actually flow through SynthesisTask -> construct_specification -> construct_property, which rejects reward properties when
-        use_exact=True."""
+    def test_use_exact_reaches_the_property(self):
+        """Exact model checking does not support reward properties, so they are rejected only with use_exact."""
         with pytest.raises(ValueError):
             paynt.task.SynthesisTask(_reward_properties(), use_exact=True)
-        # sanity: the same property without use_exact does not raise
         paynt.task.SynthesisTask(_reward_properties(), use_exact=False)

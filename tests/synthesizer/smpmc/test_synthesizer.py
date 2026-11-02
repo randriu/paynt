@@ -1,8 +1,4 @@
-"""Fixture-based tests of SynthesizerSMPMC, mirroring tests/pomdp/test_pomdp_synthesizer.py's style:
-
-instantiate the synthesizer directly, synthesize, and assert against a pinned answer -- plus cross-checks against AR/OneByOne on the same fixtures, since SMPMC
-and those engines must agree on feasibility.
-"""
+"""SynthesizerSMPMC: the answers on smpmc-tiny are worked out by hand (see tests/README.md), the member of a family it finds is model-checked."""
 
 from __future__ import annotations
 
@@ -14,7 +10,6 @@ import z3
 
 import paynt.synthesizer.smpmc
 import paynt.synthesizer.smpmc.checker
-import paynt.synthesizer.smpmc.synthesizer
 import paynt.synthesizer.synthesizer
 import paynt.synthesizer.synthesizer_ar
 import paynt.utils.timer
@@ -27,16 +22,8 @@ class TestSmpmcOnThresholdProperty:
         synthesizer = paynt.synthesizer.smpmc.SynthesizerSMPMC(smpmc_tiny.colored_mdp, smpmc_tiny.task)
         result = synthesizer.run()
         assert result.success is True
-
-    def test_agrees_with_ar_on_feasibility(self, smpmc_tiny):
-        smpmc_result = paynt.synthesizer.smpmc.SynthesizerSMPMC(smpmc_tiny.colored_mdp, smpmc_tiny.task).run()
-
-        # a genuinely separate load, not a reused fixture object: Synthesizer instances mutate
-        # task.specification state (optimality threshold/reset), so AR and SMPMC must not share one task
-        ar_factory, ar_task = load_sketch("tests/smpmc-tiny")
-        ar_result = paynt.synthesizer.synthesizer.Synthesizer.for_method(ar_factory.build(), ar_task, "ar").run()
-
-        assert smpmc_result.success == ar_result.success
+        # by hand: "done" is reached with x1=4, or with x1=1 and x2=4
+        assert str(result.assignment) in {"x1=4, x2=3, x3=8", "x1=4, x2=4, x3=8", "x1=1, x2=4, x3=8"}
 
     def test_infeasible_threshold_is_correctly_refuted(self, smpmc_tiny):
         smpmc_tiny.task.specification.constraints[0].threshold = 1.5  # P>=1.5 can never hold
@@ -74,17 +61,13 @@ class TestOptimumThresholdSeedLoggingIsEngineAgnostic:
 
 
 class TestSmpmcOnFamilyModel:
-    """Mdp-family-avoid-8-2-easy is a feature_kind=="family" sketch: --method ar on it routes to PolicyTreeSynthesizer (a robust-by-construction game-
-    abstraction algorithm solving a *different* problem), not plain existential search, so the cross-check for plain-exists SMPMC is --method onebyone, which
-    api.py routes through the generic Synthesizer.for_method path."""
+    """On a family, SMPMC searches for a member in which some policy satisfies the property."""
 
-    def test_agrees_with_onebyone_on_feasibility(self, mdp_family_avoid_8_2_easy):
-        smpmc_result = paynt.synthesizer.smpmc.SynthesizerSMPMC(mdp_family_avoid_8_2_easy.colored_mdp, mdp_family_avoid_8_2_easy.task).run()
-
-        onebyone_factory, onebyone_task = load_sketch("tests/mdp-family-avoid-8-2-easy")
-        onebyone_result = paynt.synthesizer.synthesizer.Synthesizer.for_method(onebyone_factory.build(), onebyone_task, "onebyone").run()
-
-        assert smpmc_result.success == onebyone_result.success
+    def test_the_member_found_satisfies_the_property(self, mdp_family_avoid_8_2_easy):
+        colored_mdp, task = mdp_family_avoid_8_2_easy.colored_mdp, mdp_family_avoid_8_2_easy.task
+        result = paynt.synthesizer.smpmc.SynthesizerSMPMC(colored_mdp, task).run()
+        assert result.success
+        assert colored_mdp.build_assignment(result.assignment).check_specification(task.specification).constraints_result.sat
 
 
 class RecordingSolver:

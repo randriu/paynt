@@ -34,22 +34,20 @@ def make_parameter_space(domains):
 
 
 class TestOrRecognisesInSet:
-    def test_or_of_equalities_is_exact_even_where_a_kleene_or_of_plain_equalities_would_be_unknown(self):
-        # 1 state, 2 choices; parameter p in {0,1,2}; choice0 <- Or(p==0, p==1), choice1 <- p==2
+    def test_the_negation_of_an_or_of_equalities_is_exact(self):
+        # p in {0,1}: Or(p==0, p==1) is TRUE as an in-set test, but only unknown as a Kleene Or of two unknown equalities,
+        # so only the in-set test excludes choice 0
         parameter_space = make_parameter_space([[0, 1, 2]])
-        row_groups = [0, 2]
-        builder = paynt.utils.coloring_builder.ColoringBuilder(row_groups, parameter_space.num_parameters)
+        builder = paynt.utils.coloring_builder.ColoringBuilder([0, 2], parameter_space.num_parameters)
         p = builder.parameters[0]
-        builder.color(0, builder.template(z3.Or(p == 0, p == 1)))
-        builder.color(1, builder.template(p == 2))
+        builder.color(0, builder.template(z3.Not(z3.Or(p == 0, p == 1))))
+        builder.color(1, builder.template(z3.Or(p == 0, p == 1)))
         coloring = builder.build()
 
-        # restrict p to exactly {0,1}: In_set(p,{0,1}) is exactly TRUE here (choice0 certain), and choice1 (p==2) is
-        # excluded -- a naive Or(Eq,Eq) translation would instead leave both at Kleene-U (kept, imprecisely)
         subfamily = parameter_space.copy()
         subfamily.parameter_set_options(0, [0, 1])
         selection = coloring.selectCompatibleChoices(subfamily.native)
-        assert [selection[choice] for choice in range(2)] == [True, False]
+        assert [selection[choice] for choice in range(2)] == [False, True]
 
 
 class TestGenericFormulaShapes:
@@ -485,7 +483,8 @@ class TestStandardColoring:
             assert set(standard.selectCompatibleChoices(family.native)) == set(general.selectCompatibleChoices(family.native))
 
 
-@pytest.mark.parametrize("project", ["tests/smpmc-tiny", "tests/mdp-family-avoid-8-2-easy"])
+# rocks-4-2 colors choices with pairs of parameters, smpmc-tiny with single ones
+@pytest.mark.parametrize("project", ["tests/smpmc-tiny", "tests/mdp-family-rocks-4-2"])
 class TestBuilderReproducesTheFixturesColorings:
     """Every choice of a real fixture colored, through the builder, with the conjunction it already has: the builder must hand back an equal standard Coloring
     -- and a general one selecting the same choices."""
@@ -501,17 +500,14 @@ class TestBuilderReproducesTheFixturesColorings:
                 builder.color(choice, builder.template(z3.And(*[builder.parameters[parameter] == option for parameter, option in choice_pairs])))
         return colored_mdp, builder
 
-    def test_the_standard_coloring_is_equal(self, project):
+    def test_the_standard_coloring_is_equal_and_the_general_one_selects_the_same_choices(self, project):
         colored_mdp, builder = self.rebuilt(project)
-        standard = builder.build(colored_mdp.parameter_space)
+        parameter_space = colored_mdp.parameter_space
+        standard = builder.build(parameter_space)
         assert kind_of(standard) == "Coloring"
         assert [sorted(pairs) for pairs in standard.getChoiceToAssignment()] == [sorted(pairs) for pairs in colored_mdp.coloring.getChoiceToAssignment()]
         assert [set(holes) for holes in standard.getStateToHoles()] == [set(holes) for holes in colored_mdp.coloring.getStateToHoles()]
 
-    def test_it_selects_the_same_choices_as_the_general_coloring_too(self, project):
-        colored_mdp, builder = self.rebuilt(project)
-        parameter_space = colored_mdp.parameter_space
-        standard = builder.build(parameter_space)
         general = builder.build(parameter_space, general=True)
         rng = random.Random(1)
         for _ in range(20):

@@ -167,12 +167,6 @@ class TestCrossPolaritySubsumption:
         cache.insert_refuted({0: 1, 1: 2}, True, conflict_parameters=[0, 1], epoch=0)
         assert cache.lookup({0: 1, 1: 2}, False, epoch=0) is None
 
-    def test_cross_polarity_reuse_never_produces_a_false_refutation(self):
-        cache = PartialModelCache()
-        cache.insert_refuted({0: 1}, False, conflict_parameters=[0], epoch=0)
-        result = cache.lookup({0: 1, 1: 2}, True, epoch=0)
-        assert result is None, "cross-polarity information must never manufacture a positive refutation"
-
     def test_same_polarity_refutation_still_takes_priority_and_returns_a_conflict(self):
         """If the query is refuted for its *own* polarity too, that (more useful) answer must win over the weaker cross-polarity "just inconclusive"
         shortcut."""

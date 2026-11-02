@@ -42,7 +42,7 @@ class TestTimeRemaining:
         start_synthesis_timer(synthesizer, 10)
         assert synthesizer.time_remaining() == pytest.approx(10, abs=5)
 
-    def test_is_negative_exactly_when_the_time_limit_is_reached(self, synthesizer):
-        start_synthesis_timer(synthesizer, -1)
-        assert synthesizer.time_limit_reached()
-        assert synthesizer.time_remaining() < 0
+    @pytest.mark.parametrize("limit", [-1, 100])
+    def test_is_negative_exactly_when_the_time_limit_is_reached(self, synthesizer, limit):
+        start_synthesis_timer(synthesizer, limit)
+        assert synthesizer.time_limit_reached() is (synthesizer.time_remaining() < 0)

@@ -79,12 +79,7 @@ class TestPomdpFamilyDtmcSketch:
         assert dtmc_sketch.parameter_space.size == pomdp_family_avoid_smaller.colored_mdp.parameter_space.size
 
     def test_synthesize_over_the_fsc_fixed_family_finds_the_best_environment(self, pomdp_family_avoid_smaller):
-        """End-to-end regression test for the build_dtmc_sketch -> generic AR pipeline: fixing a memoryless FSC across all 64 environment variants turns the
-        POMDP family into a plain family of DTMCs, and AR then searches over which environment (not which policy -- that's already fixed) best matches this
-        FSC's objective.
-
-        Synthesis is deterministic, so both the value and the winning environment are checked.
-        """
+        """A memoryless FSC fixed in all 64 environments leaves a family of DTMCs, in which AR finds the best environment (solver output, regression values)."""
         fsc = _trivial_fsc(pomdp_family_avoid_smaller, ambiguous_action=7)
         dtmc_sketch = paynt.mdp_family.pomdp._utils.build_dtmc_sketch(pomdp_family_avoid_smaller.colored_mdp, fsc)
         task = _task_for_dtmc_sketch(pomdp_family_avoid_smaller)

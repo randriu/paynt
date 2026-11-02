@@ -28,7 +28,7 @@ The models in `models/tests`. "Designs" is the size of the parameter space.
 |---|---|---|---|---|---|
 | `smpmc-tiny` | DTMC sketch | 8 / 15 | 3 / 8 | `P>=0.1 [F "done"]`; `optimality.props`: `Pmax`; `sketch.costs` for the costs constraint | SMPMC, constraints, robust synthesis |
 | `generic-maze` | DTMC sketch | 183 / 257 | 24 / 9.4e6 | `R{"steps"}min` | model index, scoring, SMPMC theory (an ill-conditioned DTMC) |
-| `generic-multiconstraint-dpm` | DTMC sketch | 19606 / 32676 | 16 / 4.3e7 | `easy.props`: two constraints; `hard.props`: a constraint and an objective | multi-constraint splitting |
+| `time-energy` | DTMC sketch; `tree.templ`: MDP | 3 / 7; 3 / 9 | 2 / 9; 1 / 5 (depth 0) | time and energy constraints: `sketch.props` feasible, `infeasible.props` not; `tree.props` and `tree-optimality.props` for trees | multi-constraint splitting, a known AR bug on trees |
 | `objective-optimum-violates-constraint` | DTMC sketch | 3 / 4 | 1 / 2 | `P>=0.9` and `R{"cost"}min` | known AR bug |
 | `max-reward-infinite-designs` | DTMC sketch | 4 / 5 | 1 / 2 | `R{"cost"}max`; `lower.props`: `R>=2.5` | known AR and SMPMC bug |
 | `prob-goal` | DTMC sketch; `family.templ`: MDP family | 4 / 5; 3 / 6 | 1 / 2; 1 / 3 | `P>=0 [F "goal"]` | the prob0/prob1 constraint |
@@ -50,6 +50,7 @@ Where the answers the tests expect come from:
   - `max-reward-infinite-designs`: 3.0 at EXIT=1
   - `mdp-family-correlated`: worst cases 0.45 and 0.36, worked out in its sketch
   - `smpmc-tiny`: `Pmax` 1.0, with x1=4
+  - `time-energy`: the trips of 4 hours, (0,2), (1,1) and (2,0); `tree.props` needs a tree of depth 1; `tree-optimality.props`: 4 units of energy
 - another engine: the decision-tree optima, where AR and SMPMC agree
 - solver output, so a regression check only:
   - `pomdp-maze`: 71.93

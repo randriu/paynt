@@ -163,15 +163,11 @@ class TestChecksAFullAssignmentFirst:
             f"assignment was checked; calls after that point: {later_calls}"
         )
 
-    def test_the_flag_is_shared_across_fresh_propagator_instances(self):
-        """Fresh() propagators (MBQI sub-contexts) share theory, so a full assignment checked via one instance must be visible to another -- this is what lets
-        partial-query pruning resume globally, not per sub-context."""
+    def test_a_fresh_propagator_shares_the_theory(self):
+        """MBQI sub-contexts get fresh() propagators, which must see the same flag and cache."""
         theory = FakeTheory()
-        propagator_a = paynt.synthesizer.smpmc.theory.SmpmcPropagator(z3.Solver(), None, theory, {})
-        propagator_b = propagator_a.fresh(None)
-        assert propagator_b.theory is theory
-        theory.first_full_assignment_checked = True
-        assert propagator_a.theory.first_full_assignment_checked is True
+        propagator = paynt.synthesizer.smpmc.theory.SmpmcPropagator(z3.Solver(), None, theory, {})
+        assert propagator.fresh(None).theory is theory
 
 
 class TestPushSkipsRedundantAnalyses:

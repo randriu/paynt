@@ -9,8 +9,7 @@ from tests.helpers.models import load_sketch
 
 @pytest.fixture
 def colored_mdp_parameter_space_prop_result():
-    """A plain, non-specialized ColoredMdp -- see tests/model/test_model_index.py's fixture docstring for why this no longer goes through
-    paynt.quotient.quotient.Quotient (deleted)."""
+    """The colored MDP of a DTMC sketch, its whole space as one node, the property and the model checking result of the node's MDP."""
     colored_mdp_factory, task = load_sketch("tests/generic-maze")
     colored_mdp = colored_mdp_factory.colored_mdp
     node = paynt.synthesizer.search_node.SearchNode(colored_mdp.parameter_space.copy())
@@ -22,13 +21,7 @@ def colored_mdp_parameter_space_prop_result():
 
 class TestSchedulerScoring:
     def test_estimate_scheduler_difference_returns_a_nonnegative_score_per_inconsistent_parameter(self, colored_mdp_parameter_space_prop_result):
-        """
-        estimate_scheduler_difference is a thin wrapper around a native payntbind call, so (unlike
-        choice_values) there's no independent formula worth re-deriving here in Python -- this checks the
-        contract instead: one score per inconsistent parameter, each non-negative (it's a weighted value
-        difference). Real numerical correctness is exercised end-to-end by every AR-based specialist's CLI
-        regression check, which all route splitting decisions through this exact function.
-        """
+        """The scores come from payntbind, so only their shape is checked: one score per inconsistent parameter, each a non-negative weighted difference."""
         colored_mdp, node, prop, result = colored_mdp_parameter_space_prop_result
         selection = colored_mdp.scheduler_selection(node.mdp, result.result.get_scheduler())
         inconsistent_assignments = {parameter: options for parameter, options in enumerate(selection) if len(options) > 1}
@@ -52,11 +45,8 @@ class TestSchedulerScoring:
 
 
 class TestIncompatibilityScoring:
-    """
-    Paper https://www.jair.org/index.php/jair/article/view/16593 Sec 3.3's L(h): cross-constraint
-    disagreement among consistent candidate selections. Pure/hand-built -- no real model needed, since
-    compute_incompatibility_levels only ever looks at option-index lists.
-    """
+    """L(h) of https://www.jair.org/index.php/jair/article/view/16593, Section 3.3: the options on which the selections of the undecided properties
+    disagree."""
 
     def test_fewer_than_two_candidates_yields_no_disagreement(self):
         assert paynt.utils.scoring.compute_incompatibility_levels([]) == {}
@@ -69,21 +59,13 @@ class TestIncompatibilityScoring:
         assert paynt.utils.scoring.compute_incompatibility_levels(candidates) == {0: [0, 1, 3]}
 
     def test_a_parameter_with_zero_options_in_some_candidate_contributes_no_opinion_there(self):
-        """Unlike every other feature, "dt" does not pad an irrelevant parameter to one arbitrary option -- a candidate whose selection has an empty option list
-        for some parameter must not crash and must not count as a vote."""
+        """Decision trees leave an irrelevant parameter without options: that is no vote."""
         candidates = [[[0], []], [[1], []], [[0], []]]
         assert paynt.utils.scoring.compute_incompatibility_levels(candidates) == {0: [0, 1]}
 
     def test_an_inconsistent_own_candidate_is_the_callers_responsibility_to_exclude(self):
-        """compute_incompatibility_levels itself does not filter out locally-inconsistent selections (options of length > 1 for some parameter) -- callers
-        (split_parameter_space / split_undecided_space) are responsible for only passing selections that are already fully consistent.
-
-        Documented here since it's a real, easy-to-get-wrong contract, not asserted defensively in the function itself (hot path).
-        """
+        """Only a single option is a vote, so an inconsistent selection does not count; the callers pass consistent ones only."""
         candidates = [[[0, 1]], [[2]]]
-        # parameter 0's values across candidates are effectively {0, 1, 2} once fully expanded, but this
-        # function only ever looks at singleton selections (len(options) == 1) when voting -- the first,
-        # locally-inconsistent candidate is silently skipped rather than contributing multiple values
         assert paynt.utils.scoring.compute_incompatibility_levels(candidates) == {}
 
     def test_parameters_with_max_incompatibility_on_empty_input(self):

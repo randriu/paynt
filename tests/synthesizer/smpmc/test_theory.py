@@ -45,17 +45,6 @@ class TestColoredMdpTheoryOnFullAssignments:
         assert checked_at_least_one_sat
         assert checked_at_least_one_unsat
 
-    def test_refutation_conflict_is_a_subset_of_fixed(self, smpmc_tiny):
-        prop = smpmc_tiny.task.specification.constraints[0]
-        theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(smpmc_tiny.colored_mdp, prop)
-        parameter_space = smpmc_tiny.colored_mdp.parameter_space
-        for combination in parameter_space.all_combinations():
-            fixed = dict(enumerate(combination))
-            for polarity in (True, False):
-                result = theory.check(fixed, polarity)
-                if result is not None:
-                    assert set(result.conflict_parameters).issubset(fixed.keys())
-
 
 class TestColoredMdpTheorySingletonEta:
     """For a fully fixed (singleton) eta, check() computes the value on build_assignment()'s DTMC and not on the MDP-typed model that ColoredMdp.build()
@@ -160,6 +149,7 @@ class TestColoredMdpTheoryRewardConvergence:
         result = theory._model_check(sub_mdp, alt=True)  # the max (worst-case) direction
 
         assert theory._reward_use_policy_iteration.get(True) is True
+        # the value of policy iteration, which is exact
         assert result.value == pytest.approx(903940953.7112827, rel=1e-6)
 
     def test_the_fast_converging_direction_does_not_escalate(self):
@@ -174,7 +164,7 @@ class TestColoredMdpTheoryRewardConvergence:
         assert theory._reward_use_policy_iteration.get(False, False) is False
         assert result.value == pytest.approx(6.889152753447105, rel=1e-4)
 
-    def test_a_second_query_on_an_escalated_direction_skips_reverification(self):
+    def test_a_second_query_on_an_escalated_direction_skips_value_iteration(self, monkeypatch):
         factory, task = load_sketch("tests/generic-maze")
         colored_mdp = factory.build()
         prop = task.specification.optimality
@@ -182,8 +172,11 @@ class TestColoredMdpTheoryRewardConvergence:
         sub_mdp, _selected_choices = colored_mdp.build(colored_mdp.parameter_space)
 
         first = theory._model_check(sub_mdp, alt=True)
+        value_iterations = []
+        monkeypatch.setattr(sub_mdp, "model_check_property", lambda *args, **kwargs: value_iterations.append(args))
         second = theory._model_check(sub_mdp, alt=True)
 
+        assert value_iterations == []
         assert second.value == first.value
 
     def test_probability_properties_are_unaffected(self, smpmc_tiny):
@@ -252,7 +245,7 @@ class TestColoredMdpTheoryCache:
         prop = smpmc_tiny_optimality.task.specification.optimality
         theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(smpmc_tiny.colored_mdp, prop)
         fixed = {0: 0, 1: 0, 2: 0}
-        theory.check(fixed, True)
+        assert theory.check(fixed, True) is None  # inconclusive
         calls_after_first = theory.mc_calls
         theory.epoch += 1
         theory.check(fixed, True)

@@ -1,0 +1,36 @@
+// A trip of two stages, each driven fast (1 hour, 3 units of energy), at medium speed (2 hours, 2 units) or slowly (3 hours, 1 unit). A stage takes
+// 4 units of time and energy together, so the whole trip takes 8: time + energy = 8.
+//
+// FIRST and SECOND are the speeds of the two stages (0 fast, 1 medium, 2 slow). The constraints of sketch.props, time <= 4 and energy <= 4, leave
+// exactly the trips of 4 hours: (FIRST, SECOND) = (0,2), (1,1) or (2,0). Those of infeasible.props, time <= 3 and energy <= 4, leave none, although
+// each one alone holds for some trip. The fastest trip and the most frugal one are different, so the two constraints pull a search in different
+// directions.
+dtmc
+
+hole int FIRST in {0,1,2};
+hole int SECOND in {0,1,2};
+
+module trip
+    s : [0..2] init 0;    // 0: first stage, 1: second stage, 2: arrived
+    [fast]   s=0 & FIRST=0 -> (s'=1);
+    [medium] s=0 & FIRST=1 -> (s'=1);
+    [slow]   s=0 & FIRST=2 -> (s'=1);
+    [fast]   s=1 & SECOND=0 -> (s'=2);
+    [medium] s=1 & SECOND=1 -> (s'=2);
+    [slow]   s=1 & SECOND=2 -> (s'=2);
+    [] s=2 -> true;
+endmodule
+
+label "arrived" = s=2;
+
+rewards "time"
+    [fast] true : 1;
+    [medium] true : 2;
+    [slow] true : 3;
+endrewards
+
+rewards "energy"
+    [fast] true : 3;
+    [medium] true : 2;
+    [slow] true : 1;
+endrewards

@@ -5,7 +5,8 @@ OneByOne model-checks every design, so it is the reference. The expected values 
 it.
 
 The engines that get a case wrong are marked as expected failures, strictly: the day a bug is fixed the test passes unexpectedly, which is a failure
-that says the mark has to go. Both bugs are in the abstraction-refinement search (hybrid shares the first), and the second one is SMPMC's as well.
+that says the mark has to go. Both bugs are in the abstraction-refinement search (hybrid and the decision trees share the first), and the second one is
+SMPMC's as well.
 
 1. A constraint and an objective together. At the root of the search, the scheduler that is best for the objective alone is one single design ("the
 lower bound is tight", SynthesizerAR.check_specification). When that design violates the constraint, the whole node is dropped, although it holds
@@ -24,6 +25,7 @@ import math
 
 import pytest
 
+import paynt.dt
 import paynt.synthesizer.synthesizer
 
 from tests.helpers.models import load_colored_mdp, load_sketch
@@ -77,6 +79,17 @@ class TestAConstraintAndAnObjectiveTogether:
         assert result.success
         assert result.value == pytest.approx(2.0)
         assert str(result.assignment) == "SAFE=1"
+
+    @expected_failure("the same for the decision trees, which AR searches")
+    def test_a_decision_tree_is_found_too(self):
+        """The trips of models/tests/time-energy as trees, with tree-optimality.props: the least energy of a trip of at most 4 hours is 4 units.
+
+        The tree best for the energy alone drives slowly, which takes 6 hours.
+        """
+        factory, task = load_sketch("tests/time-energy", sketch_name="tree.templ", props_name="tree-optimality.props")
+        synthesizer = paynt.dt.DtSynthesizer(factory, task)
+        synthesizer.synthesize_tree(0)
+        assert synthesizer.best_tree_value == pytest.approx(4.0)
 
 
 class TestAMaximizingReward:

@@ -10,10 +10,7 @@ from tests.helpers.models import load_sketch
 
 @pytest.fixture
 def colored_mdp_parameter_space_prop_result():
-    """A plain, non-specialized ColoredMdp built directly from a PRISM DTMC-with-parameters sketch (no FSC/tree
-    unfolding) -- this is the "generic" case paynt.quotient.quotient.Quotient used to handle, before it was
-    deleted once its last two callers (SynthesizerHybrid.split, this exact sketch.py construction site)
-    were migrated onto the shared ColoredMdp-based mechanisms."""
+    """The colored MDP of a DTMC sketch, its whole space as one node, the property and the model checking result of the node's MDP."""
     colored_mdp_factory, task = load_sketch("tests/generic-maze")
     colored_mdp = colored_mdp_factory.colored_mdp
     node = paynt.synthesizer.search_node.SearchNode(colored_mdp.parameter_space.copy())
@@ -25,13 +22,7 @@ def colored_mdp_parameter_space_prop_result():
 
 class TestModelIndexScoring:
     def test_choice_values_matches_its_documented_formula(self, colored_mdp_parameter_space_prop_result):
-        """Independent correctness check: hand-computes rew(c) + sum_s'[P(s,c,s')*mc(s')] directly from the raw transition matrix and reward model (the formula
-        choice_values documents), for every choice, and compares against ModelIndex.choice_values's actual output.
-
-        This used to compare against paynt.quotient.quotient.Quotient.choice_values instead (the method choice_values was extracted from) as an oracle, but that
-        class no longer exists -- and re-deriving the formula independently is arguably the better test anyway, since a duplicate-implementation comparison
-        can't catch a bug both sides share.
-        """
+        """The value of a choice is rew(c) + sum_s' P(s,c,s') * v(s'), computed here from the transition matrix and the reward model."""
         colored_mdp, node, prop, result = colored_mdp_parameter_space_prop_result
         state_values = result.result.get_value_vector()
         choice_values = paynt.model.model.ModelIndex.choice_values(node.mdp.model, prop, state_values)
@@ -62,12 +53,7 @@ class TestModelIndexScoring:
         assert visits[initial_state] >= 1
 
     def test_compute_expected_visits_respects_disable_flag(self, colored_mdp_parameter_space_prop_result):
-        """Regression test: the original Quotient.compute_expected_visits returned a vector sized to the full underlying MDP's state count on this early-return
-        path, which is wrong whenever `mdp` is a restricted sub-MDP with fewer states.
-
-        ModelIndex sizes the vector to `mdp` itself instead. disable_expected_visits is a plain parameter (not a class attribute) precisely so two syntheses in
-        the same process can't leak this setting into each other -- see paynt.task.SynthesisTask.
-        """
+        """Every state of the (sub-)MDP is visited once."""
         _, node, prop, result = colored_mdp_parameter_space_prop_result
         local_choices = result.result.get_scheduler().compute_action_support(node.mdp.model.nondeterministic_choice_indices)
         visits = paynt.model.model.ModelIndex.compute_expected_visits(node.mdp.model, prop, local_choices, disable_expected_visits=True)
