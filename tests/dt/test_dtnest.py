@@ -6,10 +6,9 @@ import paynt.dt.decision_tree
 import paynt.dt.dtnest
 import paynt.dt.dtnest.api
 import paynt.model.model_builder
-import paynt.parser.sketch
 import paynt.task
 
-from helpers.helper import get_sketch_paths
+from tests.helpers.models import get_sketch_paths, load_sketch
 
 # established baseline for this model+property (see get_dt_with_api.py and test_dt_synthesizer.py):
 # optimal ~0.6313574509764854, random/don't-care scheduler ~0.48451914218945663
@@ -164,8 +163,7 @@ class TestDtNestDepths:
         assert epsilon == build_task.error_threshold
 
     def test_loading_a_sketch_keeps_the_two_apart(self):
-        sketch_path, props_path = get_sketch_paths("tests/dt-orchard")
-        factory, _task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path, task_kwargs={"tree_depth": 3, "max_subtree_depth": 5})
+        factory, _task = load_sketch("tests/dt-orchard", task_kwargs={"tree_depth": 3, "max_subtree_depth": 5})
         assert (factory.build_task.tree_depth, factory.build_task.max_subtree_depth) == (3, 5)
-        factory, _task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path, task_kwargs={"max_subtree_depth": 2})
+        factory, _task = load_sketch("tests/dt-orchard", task_kwargs={"max_subtree_depth": 2})
         assert (factory.build_task.tree_depth, factory.build_task.max_subtree_depth) == (0, 2)

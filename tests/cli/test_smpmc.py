@@ -3,7 +3,7 @@ import subprocess
 import sys
 import textwrap
 
-from helpers.helper import get_sketch_paths
+from tests.helpers.models import get_sketch_paths
 
 _RUN_SCRIPT = textwrap.dedent("""
     import sys

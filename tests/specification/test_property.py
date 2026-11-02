@@ -32,7 +32,7 @@ class TestSoundMode:
 
     def test_load_sketch_sets_sound(self, monkeypatch):
         import paynt.parser.sketch
-        from helpers.helper import get_sketch_paths
+        from tests.helpers.models import get_sketch_paths
 
         monkeypatch.setattr(paynt.specification.property.Property, "sound", False)
         paynt.parser.sketch.Sketch.load_sketch(*get_sketch_paths("tests/smpmc-tiny"), sound=True)

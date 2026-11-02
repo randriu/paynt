@@ -1,19 +1,17 @@
 import pytest
 
-import paynt.parser.sketch
 import paynt.model.model
 import paynt.utils.scoring
 import paynt.synthesizer.search_node
 
-from helpers.helper import get_sketch_paths
+from tests.helpers.models import load_sketch
 
 
 @pytest.fixture
 def colored_mdp_parameter_space_prop_result():
     """A plain, non-specialized ColoredMdp -- see tests/model/test_model_index.py's fixture docstring for why this no longer goes through
     paynt.quotient.quotient.Quotient (deleted)."""
-    sketch_path, props_path = get_sketch_paths("tests/generic-maze")
-    colored_mdp_factory, task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path)
+    colored_mdp_factory, task = load_sketch("tests/generic-maze")
     colored_mdp = colored_mdp_factory.colored_mdp
     node = paynt.synthesizer.search_node.SearchNode(colored_mdp.parameter_space.copy())
     node.mdp, node.selected_choices = colored_mdp.build(node.parameter_space)

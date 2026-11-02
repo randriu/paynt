@@ -20,7 +20,7 @@ import z3
 import paynt.utils.coloring_builder
 import paynt.parameter_space.parameter_space
 
-from helpers.helper import load_colored_mdp
+from tests.helpers.models import load_colored_mdp
 
 
 def make_parameter_space(domains):

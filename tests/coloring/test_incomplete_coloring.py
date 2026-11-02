@@ -22,7 +22,7 @@ import paynt.synthesizer.smpmc
 import paynt.synthesizer.synthesizer
 import paynt.utils.coloring_builder
 
-from helpers.helper import get_sketch_paths, load_colored_mdp
+from tests.helpers.models import get_sketch_paths, load_colored_mdp, load_sketch
 
 X_VALUES = [(2,), (0, 1, 3)]
 # generic AR and Hybrid read (parameter, option) pairs back from the coloring, which only the standard one has
@@ -168,8 +168,7 @@ class TestSeveralPropertiesAreRefused:
 
         The policy tree does not support several properties either (SynthesisTask.get_property), so a family never has more than one.
         """
-        sketch_path, props_path = get_sketch_paths("tests/incomplete-two-targets")
-        factory, task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path)
+        factory, task = load_sketch("tests/incomplete-two-targets")
         assert factory.feature_kind == "family"
         with pytest.raises(NotImplementedError, match="cannot check 2 properties on a model that still has nondeterminism.*an MDP family"):
             paynt.api.get_synthesizer(factory, task, "onebyone").run()

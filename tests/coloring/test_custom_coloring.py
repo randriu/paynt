@@ -31,8 +31,8 @@ import paynt.parser.sketch
 import paynt.synthesizer.synthesizer
 import paynt.utils.coloring_builder
 
-from helpers.formulas import FormulaGenerator
-from helpers.helper import load_colored_mdp
+from tests.helpers.formulas import FormulaGenerator
+from tests.helpers.models import load_colored_mdp
 
 N = 6
 CORRIDOR = textwrap.dedent("""

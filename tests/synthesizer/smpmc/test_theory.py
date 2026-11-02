@@ -7,28 +7,27 @@ import logging
 
 import pytest
 
-import paynt.parser.sketch
 import paynt.synthesizer.smpmc
 import paynt.synthesizer.smpmc.checker
 import paynt.synthesizer.statistic
 
-from helpers.helper import get_sketch_paths
+from tests.helpers.models import load_sketch
 
 
 class TestColoredMdpTheoryOnFullAssignments:
     """For a *complete* assignment (every parameter fixed), check()'s verdict has an unambiguous ground truth: build the concrete DTMC directly and compare."""
 
-    def test_every_full_assignment_agrees_with_direct_model_checking(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        prop = smpmc_tiny_task.specification.constraints[0]
-        theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(smpmc_tiny_colored_mdp, prop)
+    def test_every_full_assignment_agrees_with_direct_model_checking(self, smpmc_tiny):
+        prop = smpmc_tiny.task.specification.constraints[0]
+        theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(smpmc_tiny.colored_mdp, prop)
 
-        parameter_space = smpmc_tiny_colored_mdp.parameter_space
+        parameter_space = smpmc_tiny.colored_mdp.parameter_space
         checked_at_least_one_sat = False
         checked_at_least_one_unsat = False
         for combination in parameter_space.all_combinations():
             fixed = dict(enumerate(combination))
             assignment = parameter_space.construct_assignment(combination)
-            dtmc = smpmc_tiny_colored_mdp.build_assignment(assignment)
+            dtmc = smpmc_tiny.colored_mdp.build_assignment(assignment)
             real_sat = dtmc.model_check_property(prop).sat
             checked_at_least_one_sat |= real_sat
             checked_at_least_one_unsat |= not real_sat
@@ -46,10 +45,10 @@ class TestColoredMdpTheoryOnFullAssignments:
         assert checked_at_least_one_sat
         assert checked_at_least_one_unsat
 
-    def test_refutation_conflict_is_a_subset_of_fixed(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        prop = smpmc_tiny_task.specification.constraints[0]
-        theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(smpmc_tiny_colored_mdp, prop)
-        parameter_space = smpmc_tiny_colored_mdp.parameter_space
+    def test_refutation_conflict_is_a_subset_of_fixed(self, smpmc_tiny):
+        prop = smpmc_tiny.task.specification.constraints[0]
+        theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(smpmc_tiny.colored_mdp, prop)
+        parameter_space = smpmc_tiny.colored_mdp.parameter_space
         for combination in parameter_space.all_combinations():
             fixed = dict(enumerate(combination))
             for polarity in (True, False):
@@ -64,8 +63,7 @@ class TestColoredMdpTheorySingletonEta:
     loop treat a non-improving witness as still viable."""
 
     def test_a_full_assignment_is_checked_via_the_exact_dtmc_value_not_build(self):
-        sketch_path, props_path = get_sketch_paths("tests/generic-maze")
-        factory, task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path)
+        factory, task = load_sketch("tests/generic-maze")
         colored_mdp = factory.build()
         prop = task.specification.optimality
         theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(colored_mdp, prop)
@@ -92,9 +90,9 @@ class TestColoredMdpTheoryOutOfRangeValues:
     See the guard in checker.py's check().
     """
 
-    def test_out_of_range_option_is_inconclusive_not_a_crash(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        prop = smpmc_tiny_task.specification.constraints[0]
-        theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(smpmc_tiny_colored_mdp, prop)
+    def test_out_of_range_option_is_inconclusive_not_a_crash(self, smpmc_tiny):
+        prop = smpmc_tiny.task.specification.constraints[0]
+        theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(smpmc_tiny.colored_mdp, prop)
         # parameter 0 (x1) only has options [0,1,2,3] -- 9999 is never valid
         assert theory.check({0: 9999}, True) is None
         assert theory.check({0: 9999}, False) is None
@@ -114,8 +112,7 @@ class TestColoredMdpTheoryRelevantParameters:
 
     @pytest.mark.parametrize("project", ["tests/smpmc-tiny", "tests/generic-maze", "tests/mdp-family-avoid-8-2-easy"])
     def test_agrees_with_the_union_of_the_per_state_supports(self, project):
-        sketch_path, props_path = get_sketch_paths(project)
-        factory, task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path)
+        factory, task = load_sketch(project)
         colored_mdp = factory.build()
         specification = task.specification
         prop = specification.optimality if specification.optimality is not None else specification.constraints[0]
@@ -132,16 +129,16 @@ class TestColoredMdpTheoryRelevantParameters:
             assert isinstance(relevant, set)
             assert relevant == self.union_of_sets(colored_mdp, sub_mdp), f"{num_fixed} parameters fixed"
 
-    def test_the_sub_mdp_of_a_smaller_space_depends_on_no_more_parameters(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        prop = smpmc_tiny_task.specification.constraints[0]
-        theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(smpmc_tiny_colored_mdp, prop)
-        space = smpmc_tiny_colored_mdp.parameter_space
+    def test_the_sub_mdp_of_a_smaller_space_depends_on_no_more_parameters(self, smpmc_tiny):
+        prop = smpmc_tiny.task.specification.constraints[0]
+        theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(smpmc_tiny.colored_mdp, prop)
+        space = smpmc_tiny.colored_mdp.parameter_space
         eta = space.copy()
-        sub_mdp, _choices = smpmc_tiny_colored_mdp.build(eta)
+        sub_mdp, _choices = smpmc_tiny.colored_mdp.build(eta)
         whole = theory.relevant_parameters(eta, sub_mdp)
         assert whole <= set(range(space.num_parameters))
         eta.parameter_set_options(0, [space.parameter_options(0)[0]])
-        sub_mdp, _choices = smpmc_tiny_colored_mdp.build(eta)
+        sub_mdp, _choices = smpmc_tiny.colored_mdp.build(eta)
         assert theory.relevant_parameters(eta, sub_mdp) <= whole
 
 
@@ -154,8 +151,7 @@ class TestColoredMdpTheoryRewardConvergence:
     """
 
     def test_the_slow_converging_direction_escalates_to_the_correct_value(self):
-        sketch_path, props_path = get_sketch_paths("tests/generic-maze")
-        factory, task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path)
+        factory, task = load_sketch("tests/generic-maze")
         colored_mdp = factory.build()
         prop = task.specification.optimality
         theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(colored_mdp, prop)
@@ -167,8 +163,7 @@ class TestColoredMdpTheoryRewardConvergence:
         assert result.value == pytest.approx(903940953.7112827, rel=1e-6)
 
     def test_the_fast_converging_direction_does_not_escalate(self):
-        sketch_path, props_path = get_sketch_paths("tests/generic-maze")
-        factory, task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path)
+        factory, task = load_sketch("tests/generic-maze")
         colored_mdp = factory.build()
         prop = task.specification.optimality
         theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(colored_mdp, prop)
@@ -180,8 +175,7 @@ class TestColoredMdpTheoryRewardConvergence:
         assert result.value == pytest.approx(6.889152753447105, rel=1e-4)
 
     def test_a_second_query_on_an_escalated_direction_skips_reverification(self):
-        sketch_path, props_path = get_sketch_paths("tests/generic-maze")
-        factory, task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path)
+        factory, task = load_sketch("tests/generic-maze")
         colored_mdp = factory.build()
         prop = task.specification.optimality
         theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(colored_mdp, prop)
@@ -192,12 +186,12 @@ class TestColoredMdpTheoryRewardConvergence:
 
         assert second.value == first.value
 
-    def test_probability_properties_are_unaffected(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
+    def test_probability_properties_are_unaffected(self, smpmc_tiny):
         """The escalation machinery only ever triggers for reward properties -- probability values are bounded in [0,1] and don't exhibit this failure mode, so
         a probability property should never end up flagged for policy iteration."""
-        prop = smpmc_tiny_task.specification.constraints[0]
-        theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(smpmc_tiny_colored_mdp, prop)
-        sub_mdp, _selected_choices = smpmc_tiny_colored_mdp.build(smpmc_tiny_colored_mdp.parameter_space)
+        prop = smpmc_tiny.task.specification.constraints[0]
+        theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(smpmc_tiny.colored_mdp, prop)
+        sub_mdp, _selected_choices = smpmc_tiny.colored_mdp.build(smpmc_tiny.colored_mdp.parameter_space)
 
         theory._model_check(sub_mdp, alt=False)
         theory._model_check(sub_mdp, alt=True)
@@ -212,8 +206,7 @@ class TestColoredMdpTheoryRewardVerificationOnLargeModels:
 
     @staticmethod
     def maze_theory_and_sub_mdp():
-        sketch_path, props_path = get_sketch_paths("tests/generic-maze")
-        factory, task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path)
+        factory, task = load_sketch("tests/generic-maze")
         colored_mdp = factory.build()
         theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(colored_mdp, task.specification.optimality)
         sub_mdp, _selected_choices = colored_mdp.build(colored_mdp.parameter_space)
@@ -246,18 +239,18 @@ class TestColoredMdpTheoryRewardVerificationOnLargeModels:
 
 
 class TestColoredMdpTheoryCache:
-    def test_repeated_query_is_served_from_cache_without_a_second_model_check(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        prop = smpmc_tiny_task.specification.constraints[0]
-        theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(smpmc_tiny_colored_mdp, prop)
+    def test_repeated_query_is_served_from_cache_without_a_second_model_check(self, smpmc_tiny):
+        prop = smpmc_tiny.task.specification.constraints[0]
+        theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(smpmc_tiny.colored_mdp, prop)
         fixed = {0: 0, 1: 0, 2: 0}
         theory.check(fixed, True)
         calls_after_first = theory.mc_calls
         theory.check(fixed, True)
         assert theory.mc_calls == calls_after_first, "a repeated query should hit the cache, not call Storm again"
 
-    def test_inconclusive_cache_entry_is_not_reused_across_an_epoch_change(self, smpmc_tiny_colored_mdp, smpmc_tiny_optimality_task):
-        prop = smpmc_tiny_optimality_task.specification.optimality
-        theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(smpmc_tiny_colored_mdp, prop)
+    def test_inconclusive_cache_entry_is_not_reused_across_an_epoch_change(self, smpmc_tiny, smpmc_tiny_optimality):
+        prop = smpmc_tiny_optimality.task.specification.optimality
+        theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(smpmc_tiny.colored_mdp, prop)
         fixed = {0: 0, 1: 0, 2: 0}
         theory.check(fixed, True)
         calls_after_first = theory.mc_calls
@@ -278,39 +271,39 @@ class TestColoredMdpTheoryStatisticWiring:
         theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(colored_mdp, prop, synthesizer.stat)
         return synthesizer, theory
 
-    def test_stat_is_optional(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
+    def test_stat_is_optional(self, smpmc_tiny):
         """ColoredMdpTheory works without a stat argument, the default."""
-        prop = smpmc_tiny_task.specification.constraints[0]
-        theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(smpmc_tiny_colored_mdp, prop)
+        prop = smpmc_tiny.task.specification.constraints[0]
+        theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(smpmc_tiny.colored_mdp, prop)
         assert theory.stat is None
         # a full round of checks over every combination must not raise just because stat is absent
-        for combination in smpmc_tiny_colored_mdp.parameter_space.all_combinations():
+        for combination in smpmc_tiny.colored_mdp.parameter_space.all_combinations():
             theory.check(dict(enumerate(combination)), True)
 
-    def test_a_model_check_is_recorded_as_a_dtmc_iteration(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        synthesizer, theory = self._theory_with_real_stat(smpmc_tiny_colored_mdp, smpmc_tiny_task)
+    def test_a_model_check_is_recorded_as_a_dtmc_iteration(self, smpmc_tiny):
+        synthesizer, theory = self._theory_with_real_stat(smpmc_tiny.colored_mdp, smpmc_tiny.task)
         assert synthesizer.stat.iterations_dtmc is None
         theory.check({0: 0, 1: 0, 2: 0}, True)  # a full assignment -> the singleton-eta/DTMC path
         assert synthesizer.stat.iterations_dtmc == 1
         assert synthesizer.stat.iterations_mdp is None
 
-    def test_a_cache_hit_does_not_double_count_an_iteration(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        synthesizer, theory = self._theory_with_real_stat(smpmc_tiny_colored_mdp, smpmc_tiny_task)
+    def test_a_cache_hit_does_not_double_count_an_iteration(self, smpmc_tiny):
+        synthesizer, theory = self._theory_with_real_stat(smpmc_tiny.colored_mdp, smpmc_tiny.task)
         fixed = {0: 0, 1: 0, 2: 0}
         theory.check(fixed, True)
         theory.check(fixed, True)
         assert synthesizer.stat.iterations_dtmc == 1
 
-    def test_a_fresh_refutation_increments_explored_on_the_synthesizer(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        synthesizer, theory = self._theory_with_real_stat(smpmc_tiny_colored_mdp, smpmc_tiny_task)
+    def test_a_fresh_refutation_increments_explored_on_the_synthesizer(self, smpmc_tiny):
+        synthesizer, theory = self._theory_with_real_stat(smpmc_tiny.colored_mdp, smpmc_tiny.task)
         assert synthesizer.explored == 0
         # {x1=1, x2=3} (option indices 0 and 0) is enough to refute viable for this sketch: P>=0.1[F "done"] fails for it (see the ground-truth sweep above)
         result = theory.check({0: 0, 1: 0}, True)
         assert result is not None, "expected a refutation to set up this test meaningfully"
         assert synthesizer.explored > 0
 
-    def test_a_cache_hit_does_not_double_count_explored(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        synthesizer, theory = self._theory_with_real_stat(smpmc_tiny_colored_mdp, smpmc_tiny_task)
+    def test_a_cache_hit_does_not_double_count_explored(self, smpmc_tiny):
+        synthesizer, theory = self._theory_with_real_stat(smpmc_tiny.colored_mdp, smpmc_tiny.task)
         fixed = {0: 0, 1: 0}
         theory.check(fixed, True)
         explored_after_first = synthesizer.explored
@@ -328,20 +321,20 @@ class TestWorstCaseBounds:
     def _theory(self, colored_mdp, task):
         return paynt.synthesizer.smpmc.checker.ColoredMdpTheory(colored_mdp, task.specification.constraints[0], forall_parameters=[1])
 
-    def test_a_refuted_not_viable_literal_bounds_its_policy(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        theory = self._theory(smpmc_tiny_colored_mdp, smpmc_tiny_task)
+    def test_a_refuted_not_viable_literal_bounds_its_policy(self, smpmc_tiny):
+        theory = self._theory(smpmc_tiny.colored_mdp, smpmc_tiny.task)
         assert theory.check(self.policy, False) is not None
         bound = theory.worst_case_bound(self.policy)
         assert bound is not None and bound.value == pytest.approx(1.0) and not bound.exact
 
-    def test_a_refuted_full_assignment_makes_the_bound_exact(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        theory = self._theory(smpmc_tiny_colored_mdp, smpmc_tiny_task)
+    def test_a_refuted_full_assignment_makes_the_bound_exact(self, smpmc_tiny):
+        theory = self._theory(smpmc_tiny.colored_mdp, smpmc_tiny.task)
         theory.check({**self.policy, 1: 0}, False)
         bound = theory.worst_case_bound(self.policy)
         assert bound is not None and bound.exact
 
-    def test_a_cached_refutation_bounds_its_policy_too(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        theory = self._theory(smpmc_tiny_colored_mdp, smpmc_tiny_task)
+    def test_a_cached_refutation_bounds_its_policy_too(self, smpmc_tiny):
+        theory = self._theory(smpmc_tiny.colored_mdp, smpmc_tiny.task)
         theory.check(self.policy, False)
         theory._worst_case.clear()
         calls = theory.mc_calls
@@ -349,39 +342,39 @@ class TestWorstCaseBounds:
         assert theory.mc_calls == calls, "the query should have been answered by the cached refutation"
         assert theory.worst_case_bound(self.policy) is not None
 
-    def test_a_viable_literal_does_not_bound_the_worst_case(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        theory = self._theory(smpmc_tiny_colored_mdp, smpmc_tiny_task)
+    def test_a_viable_literal_does_not_bound_the_worst_case(self, smpmc_tiny):
+        theory = self._theory(smpmc_tiny.colored_mdp, smpmc_tiny.task)
         theory.check({0: 0, 1: 0, 2: 0}, True)
         assert theory.worst_case_bound({0: 0, 2: 0}) is None
 
-    def test_a_cached_refutation_of_unknown_value_leaves_the_policy_unbounded(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
+    def test_a_cached_refutation_of_unknown_value_leaves_the_policy_unbounded(self, smpmc_tiny):
         """The environments of a policy are covered by refutations, and the worst of their values bounds the policy's worst case: one without a value (so, no
         bound on its region) means no bound at all for the policy."""
-        theory = self._theory(smpmc_tiny_colored_mdp, smpmc_tiny_task)
+        theory = self._theory(smpmc_tiny.colored_mdp, smpmc_tiny.task)
         theory.cache.insert_refuted({**self.policy, 1: 1}, False, [0, 1, 2], theory.epoch)
         calls = theory.mc_calls
         assert theory.check({**self.policy, 1: 1}, False) is not None
         assert theory.mc_calls == calls, "the query should have been answered by the cached refutation"
         assert theory.worst_case_bound(self.policy) is None
 
-    def test_a_refutation_with_a_value_bounds_the_query_even_next_to_one_without(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
+    def test_a_refutation_with_a_value_bounds_the_query_even_next_to_one_without(self, smpmc_tiny):
         """The refutation of x2 == 0 does not depend on x2 (the policy never reaches the state that reads it), so it refutes x2 == 1 as well, with its value."""
-        theory = self._theory(smpmc_tiny_colored_mdp, smpmc_tiny_task)
+        theory = self._theory(smpmc_tiny.colored_mdp, smpmc_tiny.task)
         assert theory.check({**self.policy, 1: 0}, False) is not None
         theory.cache.insert_refuted({**self.policy, 1: 1}, False, [0, 1, 2], theory.epoch)
         assert theory.check({**self.policy, 1: 1}, False) is not None
         bound = theory.worst_case_bound(self.policy)
         assert bound is not None and bound.value == pytest.approx(1.0)
 
-    def test_a_policy_without_a_bound_is_not_bounded_by_later_refutations_either(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        theory = self._theory(smpmc_tiny_colored_mdp, smpmc_tiny_task)
+    def test_a_policy_without_a_bound_is_not_bounded_by_later_refutations_either(self, smpmc_tiny):
+        theory = self._theory(smpmc_tiny.colored_mdp, smpmc_tiny.task)
         theory.cache.insert_refuted({**self.policy, 1: 1}, False, [0, 1, 2], theory.epoch)
         theory.check({**self.policy, 1: 1}, False)
         theory.check({**self.policy, 1: 0}, False)
         assert theory.worst_case_bound(self.policy) is None
 
-    def test_the_unknown_is_dropped_with_the_epoch_too(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        theory = self._theory(smpmc_tiny_colored_mdp, smpmc_tiny_task)
+    def test_the_unknown_is_dropped_with_the_epoch_too(self, smpmc_tiny):
+        theory = self._theory(smpmc_tiny.colored_mdp, smpmc_tiny.task)
         theory.cache.insert_refuted({**self.policy, 1: 1}, False, [0, 1, 2], theory.epoch)
         theory.check({**self.policy, 1: 1}, False)
         theory.epoch += 1
@@ -389,9 +382,9 @@ class TestWorstCaseBounds:
         bound = theory.worst_case_bound(self.policy)
         assert bound is not None and bound.value == pytest.approx(1.0)
 
-    def test_bounds_are_dropped_with_the_epoch(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
+    def test_bounds_are_dropped_with_the_epoch(self, smpmc_tiny):
         """They cover the environments only under the threshold they were refuted against."""
-        theory = self._theory(smpmc_tiny_colored_mdp, smpmc_tiny_task)
+        theory = self._theory(smpmc_tiny.colored_mdp, smpmc_tiny.task)
         theory.check(self.policy, False)
         theory.epoch += 1
         assert theory.worst_case_bound(self.policy) is None

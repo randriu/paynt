@@ -7,7 +7,7 @@ import paynt.model.model_builder
 import paynt.task
 import paynt.utils.timer
 
-from helpers.helper import get_sketch_paths
+from tests.helpers.models import get_sketch_paths
 
 
 class TestDtSynthesis:
@@ -52,7 +52,7 @@ class TestDtSynthesis:
         produce genuine cross-constraint disagreement (both push toward the same underlying policy) -- this
         model can't exercise the L(h) tier specifically (that needs constraints on genuinely different
         criteria, like easy.props's two different reward structures in
-        tests/synthesizer/test_synthesizer_ar.py). What it does confirm: neither harmonize_inconsistent_
+        tests/cli/test_multi_constraint_splitting.py). What it does confirm: neither harmonize_inconsistent_
         scheduler nor split_undecided_space crashes or hangs when node.analysis_result.constraints_result has
         2 undecided entries, and the search genuinely explores (unlike a trivially-resolved-at-the-root spec).
         Bounded rather than run to completion -- this threshold has no admissible tree within a few seconds
@@ -77,7 +77,7 @@ class TestDtSynthesis:
         finally:
             paynt.utils.timer.GlobalTimer.start()
 
-    def test_synthesize_finds_the_known_optimum(self, dt_colored_mdp_factory, dt_task):
+    def test_synthesize_finds_the_known_optimum(self, dt_orchard):
         """Regression test for DtSynthesizer.split_undecided_space/scheduler_scores (the search-policy methods moved off the factory during this migration).
         Kept at depth 0 deliberately: full AR-based tree synthesis is combinatorially expensive on this model at higher depths (which is exactly why
         get_dt_with_api.py uses dtnest's subtree-based search instead of plain synthesize_tree for real use) -- but dtnest's subtree calls go through this same
@@ -87,7 +87,7 @@ class TestDtSynthesis:
         Since synthesis is deterministic, the tree itself (not just its value) is checked too: at depth 0 the only admissible tree is a single leaf, so its
         string form is a one-line action label.
         """
-        synthesizer = paynt.dt.DtSynthesizer(dt_colored_mdp_factory, dt_task)
+        synthesizer = paynt.dt.DtSynthesizer(dt_orchard.factory, dt_orchard.task)
         synthesizer.synthesize_tree(depth=0)
         assert synthesizer.best_tree is not None
         assert synthesizer.best_tree_value == pytest.approx(0.48450450140758644, abs=1e-6)

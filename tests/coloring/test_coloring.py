@@ -9,7 +9,7 @@ import pytest
 
 import paynt.utils.coloring
 
-from helpers.helper import general_colored_mdp, load_colored_mdp
+from tests.helpers.models import general_colored_mdp, load_colored_mdp
 
 FIXTURES = ["tests/smpmc-tiny", "tests/mdp-family-avoid-8-2-easy"]
 

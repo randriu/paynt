@@ -20,11 +20,11 @@ import z3.z3util
 
 import payntbind.synthesis
 import paynt.parameter_space.parameter_space
-import paynt.parser.sketch
 import paynt.utils.coloring
 import paynt.utils.coloring_builder
-from helpers.formulas import FormulaGenerator
-from helpers.helper import general_colored_mdp, get_sketch_paths, load_colored_mdp
+
+from tests.helpers.formulas import FormulaGenerator
+from tests.helpers.models import general_colored_mdp, load_colored_mdp, load_sketch
 
 choice_formula = paynt.utils.coloring.choice_formula
 parameter_variables = paynt.utils.coloring.parameter_variables
@@ -270,8 +270,7 @@ class TestSchedulersOnDecisionTrees:
 
     @staticmethod
     def load(project, depth):
-        sketch_path, props_path = get_sketch_paths(project)
-        factory, _task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path)
+        factory, _task = load_sketch(project)
         return factory.reset_tree(depth, general=True)
 
     def test_the_choices_that_a_tree_makes_can_be_made(self, project, depth):
@@ -441,8 +440,7 @@ class TestDecisionTrees:
     def test_the_formula_of_a_choice_holds_exactly_where_the_choice_is_enabled(self, project, depth):
         """Only the choices of the states that the tree reaches are enabled or not (the coloring explores the states from the initial one), so the others are
         left out."""
-        sketch_path, props_path = get_sketch_paths(project)
-        factory, _task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path)
+        factory, _task = load_sketch(project)
         colored_mdp = factory.reset_tree(depth, general=True)
         parameter_space, coloring = colored_mdp.parameter_space, colored_mdp.coloring
         names = {parameter_space.parameter_name(parameter) for parameter in range(parameter_space.num_parameters)}

@@ -11,11 +11,11 @@ import random
 import pytest
 import stormpy
 
-import paynt.parser.sketch
 import paynt.dt._utils
 import paynt.dt.coloring_general
 import paynt.dt.decision_tree
-from helpers.helper import get_sketch_paths
+
+from tests.helpers.models import load_sketch
 
 PROJECTS = ["tests/dt-orchard", "tests/dt-maze"]
 DEPTHS = [0, 1, 2]
@@ -25,8 +25,7 @@ CONSISTENCY_CASES = [("tests/dt-orchard", 0), ("tests/dt-orchard", 1), ("tests/d
 
 
 def load(project, depth):
-    sketch_path, props_path = get_sketch_paths(project)
-    factory, task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path)
+    factory, task = load_sketch(project)
     return factory.reset_tree(depth, general=True), factory.reset_tree(depth, general=False), task
 
 
@@ -178,8 +177,7 @@ class TestAreChoicesConsistentMatchesColoringSmt:
 
 
 def load_factory(project):
-    sketch_path, props_path = get_sketch_paths(project)
-    factory, _task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path)
+    factory, _task = load_sketch(project)
     return factory
 
 

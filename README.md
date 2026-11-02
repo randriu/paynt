@@ -355,8 +355,10 @@ From the root of the repository:
 ```shell
 pip install ".[test]"
 pytest tests                    # PAYNT tests
-(cd payntbind && pytest tests)  # payntbind tests, run separately
+pytest payntbind/tests          # payntbind tests
 ```
+
+[tests/README.md](tests/README.md) describes how the tests are organized, the test models, and how to write a test.
 
 Useful options:
 - `-n auto` runs the tests in parallel.

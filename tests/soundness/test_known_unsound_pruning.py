@@ -24,18 +24,16 @@ import math
 
 import pytest
 
-import paynt.parser.sketch
 import paynt.synthesizer.synthesizer
 
-from helpers.helper import get_sketch_paths, load_colored_mdp
+from tests.helpers.models import load_colored_mdp, load_sketch
 
 OBJECTIVE_VIOLATES_CONSTRAINT = "tests/objective-optimum-violates-constraint"
 MAX_REWARD = "tests/max-reward-infinite-designs"
 
 
 def run(project, method, props_name="sketch.props"):
-    sketch_path, props_path = get_sketch_paths(project, props_name=props_name)
-    factory, task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path)
+    factory, task = load_sketch(project, props_name=props_name)
     return paynt.synthesizer.synthesizer.Synthesizer.for_method(factory.build(), task, method).run()
 
 
