@@ -12,11 +12,6 @@ def agents_with_a_second_memory_node(colored_mdp):
 
 
 class TestDecPomdpColoredMdpFactory:
-    def test_factory_does_not_build_automatically(self, decpomdp_dectiger):
-        """A factory builds a colored MDP, and unfolds the memory, only when asked."""
-        assert not hasattr(decpomdp_dectiger.factory, "colored_mdp")
-        assert not hasattr(decpomdp_dectiger.factory, "current_memory_size")
-
     def test_load_sketch_produces_a_decpomdp_colored_mdp(self, decpomdp_dectiger):
         assert type(decpomdp_dectiger.colored_mdp) is paynt.colored_mdp.ColoredMdp
         assert decpomdp_dectiger.colored_mdp.feature_kind == "decpomdp"

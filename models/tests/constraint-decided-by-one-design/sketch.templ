@@ -1,0 +1,25 @@
+// H=0 reaches the goal at a cost of 1, H=1 gets stuck, H=2 reaches it for free. sketch.props wants the goal reached with probability above 1/2 and a cost
+// below 1/2: only H=2 does both.
+//
+// AR checks each constraint on the MDP of all three designs. The cheapest scheduler is H=2 alone, which satisfies the whole specification, so the cost
+// constraint is taken as satisfied by every design, which H=0 is not. The scheduler Storm picks for reaching the goal is H=0 alone (H=2 is as good), so the
+// probability constraint stays open with nothing to split on, and AR fails with "undecided node has neither cross-constraint disagreement nor any
+// inconsistent property to split on". OneByOne, CEGIS and SMPMC find H=2.
+dtmc
+
+hole int H in {0,1,2};
+
+module m
+    s : [0..2] init 0;    // 1: stuck, 2: goal
+    [go0] s=0 & H=0 -> (s'=2);
+    [go1] s=0 & H=1 -> (s'=1);
+    [go2] s=0 & H=2 -> (s'=2);
+    [] s>0 -> true;
+endmodule
+
+label "goal" = s=2;
+
+rewards "cost"
+    [go0] true : 1;
+    [go1] true : 2;
+endrewards

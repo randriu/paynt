@@ -156,4 +156,4 @@ skip_empty = true
 [tool.mutmut]
 source_paths = ["paynt/"]
 do_not_mutate = ["paynt/pomdp/saynt/*"] # TODO remove once SAYNT is fixed and tested
-also_copy = ["models/tests/"]
+also_copy = ["models/tests/", "models/performance-test/dpm-demo/"]

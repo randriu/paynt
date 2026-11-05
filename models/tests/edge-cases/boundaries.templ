@@ -1,0 +1,21 @@
+// The probability of the goal is H/4 and reaching the end costs H, so the designs have probabilities 0, 1/4, 1/2, 1 and costs 0, 1, 2, 4. Every value is exact in
+// floating point too (no cycles), so a threshold equal to a value tells >= from > and <= from <.
+dtmc
+
+hole int H in {0,1,2,4};
+
+module m
+    s : [0..2] init 0;    // 0: start, 1: goal, 2: lost
+    [go] s=0 & H=0 -> (s'=2);
+    [go] s=0 & H=1 -> 0.25 : (s'=1) + 0.75 : (s'=2);
+    [go] s=0 & H=2 -> 0.5 : (s'=1) + 0.5 : (s'=2);
+    [go] s=0 & H=4 -> (s'=1);
+    [] s>0 -> true;
+endmodule
+
+label "goal" = s=1;
+label "done" = s>0;
+
+rewards "cost"
+    [go] true : H;
+endrewards

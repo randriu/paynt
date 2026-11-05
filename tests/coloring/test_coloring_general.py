@@ -1,6 +1,5 @@
-"""Differential tests for ColoringGeneral (payntbind.synthesis.ColoringGeneral): lift several tracked "generic"/"family" fixtures' plain Coloring via
-fromColoring and check it agrees with the original Coloring, then check the generic engines (CEGIS/OneByOne/SMPMC) reach the same feasibility answer on the
-lifted colored MDP.
+"""Differential tests for ColoringGeneral (payntbind.synthesis.ColoringGeneral): the plain Coloring of a "generic" and a "family" fixture, lifted via
+fromColoring, must agree with the original. The engines on lifted colorings are checked against the reference in tests/soundness/test_engines.py.
 
 Lifting a plain Coloring is not meant to compete with Coloring on performance: these tests check correctness only, on fixtures that do not themselves need
 generality.
@@ -23,7 +22,7 @@ import paynt.utils.scoring
 
 from tests.helpers.models import general_colored_mdp, load_colored_mdp
 
-FIXTURES = ["tests/smpmc-tiny", "tests/mdp-family-avoid-8-2-easy"]
+FIXTURES = ["tests/smpmc-tiny", "tests/mdp-family-rocks-4-2"]
 
 
 def random_subfamilies(parameter_space, count, seed):
@@ -89,8 +88,6 @@ class TestFromColoringMatchesPlainColoring:
     def test_build_assignment_gives_an_identical_model(self, project):
         colored_mdp, _task = load_colored_mdp(project)
         general_mdp = general_colored_mdp(colored_mdp)
-        if colored_mdp.feature_kind in ("family", "pomdp_family"):
-            pytest.skip("build_assignment keeps genuine nondeterminism for families (fixing the environment doesn't fix the policy) -- not comparable this way")
         parameter_space = colored_mdp.parameter_space
         combinations = list(parameter_space.all_combinations())
         rng = random.Random(3)
@@ -100,25 +97,6 @@ class TestFromColoringMatchesPlainColoring:
             plain_model = colored_mdp.build_assignment(assignment)
             general_model = general_mdp.build_assignment(assignment)
             assert str(plain_model.model.transition_matrix) == str(general_model.model.transition_matrix)
-
-
-@pytest.mark.parametrize("project", FIXTURES)
-@pytest.mark.parametrize("method", ["onebyone", "cegis", "smpmc"])
-class TestEnginesAgreeOnLiftedColoredMdp:
-    def test_feasibility_matches_ar_on_the_original_coloring(self, project, method):
-        """CEGIS/OneByOne/SMPMC on the ColoringGeneral-lifted colored MDP must agree with AR on the original plain Coloring on the same fixture -- feasibility
-        only (matching TestSmpmcOnFamilyModel's own reasoning: --method ar on a "family" fixture routes to PolicyTreeSynthesizer, a different problem, so AR is
-        only the right oracle for "generic" fixtures; for "family" every listed engine, including onebyone here, answers the plain existential question, so they
-        may be compared directly)."""
-        colored_mdp, task = load_colored_mdp(project)
-        general_mdp = general_colored_mdp(colored_mdp)
-        general_result = paynt.synthesizer.synthesizer.Synthesizer.for_method(general_mdp, task, method).run()
-
-        oracle_colored_mdp, oracle_task = load_colored_mdp(project)
-        oracle_method = "onebyone" if oracle_colored_mdp.feature_kind == "family" else "ar"
-        oracle_result = paynt.synthesizer.synthesizer.Synthesizer.for_method(oracle_colored_mdp, oracle_task, oracle_method).run()
-
-        assert general_result.success == oracle_result.success
 
 
 @pytest.mark.parametrize("project", FIXTURES)

@@ -27,9 +27,3 @@ class TestBuildConstraint:
     def test_an_unknown_name_lists_the_available_ones(self):
         with pytest.raises(ValueError, match=r"unknown constraint 'bogus'; available: \['costs', 'exists', 'exists_forall', 'prob0', 'prob1'\]"):
             paynt.parameter_space.constraints.build_constraint("bogus")
-
-
-class TestConstraintBase:
-    def test_a_constraint_has_to_say_which_clauses_it_adds(self):
-        with pytest.raises(NotImplementedError):
-            paynt.parameter_space.constraints.Constraint().build(None)

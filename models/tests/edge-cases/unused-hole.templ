@@ -1,0 +1,14 @@
+// UNUSED occurs nowhere in the model, so it colors no choice: both of its options give the same model. H=1 reaches the goal with probability 1/2, H=0 never.
+dtmc
+
+hole int H in {0,1};
+hole int UNUSED in {0,1};
+
+module m
+    s : [0..2] init 0;
+    [] s=0 & H=0 -> (s'=2);
+    [] s=0 & H=1 -> 0.5 : (s'=1) + 0.5 : (s'=2);
+    [] s>0 -> true;
+endmodule
+
+label "goal" = s=1;

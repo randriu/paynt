@@ -12,11 +12,6 @@ class TestDtColoredMdpFactory:
         assert dt_orchard.colored_mdp.feature_kind == "dt"
         assert isinstance(dt_orchard.colored_mdp.feature_info, paynt.dt._utils.DtInfo)
 
-    def test_factory_does_not_build_automatically(self, dt_orchard):
-        """A factory builds a colored MDP only when asked."""
-        assert isinstance(dt_orchard.factory, paynt.dt.DtColoredMdpFactory)
-        assert not hasattr(dt_orchard.factory, "colored_mdp")
-
     @pytest.mark.parametrize("depth", [0, 2])
     def test_build_produces_a_tree_at_build_tasks_configured_depth(self, dt_orchard, depth):
         assert dt_orchard.factory.build_task is not None

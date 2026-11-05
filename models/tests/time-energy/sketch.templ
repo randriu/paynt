@@ -4,7 +4,7 @@
 // FIRST and SECOND are the speeds of the two stages (0 fast, 1 medium, 2 slow). The constraints of sketch.props, time <= 4 and energy <= 4, leave
 // exactly the trips of 4 hours: (FIRST, SECOND) = (0,2), (1,1) or (2,0). Those of infeasible.props, time <= 3 and energy <= 4, leave none, although
 // each one alone holds for some trip. The fastest trip and the most frugal one are different, so the two constraints pull a search in different
-// directions.
+// directions. optimality.props asks for the least energy of a trip of at most 4 hours: 4 units.
 dtmc
 
 hole int FIRST in {0,1,2};

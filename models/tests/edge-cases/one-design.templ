@@ -1,0 +1,12 @@
+// A family of one design: the only hole has one option. The goal is reached with probability 1/2.
+dtmc
+
+hole int H in {1};
+
+module m
+    s : [0..2] init 0;
+    [] s=0 -> 0.5 : (s'=H) + 0.5 : (s'=2);
+    [] s>0 -> true;
+endmodule
+
+label "goal" = s=1;

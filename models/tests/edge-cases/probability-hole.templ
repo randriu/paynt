@@ -1,0 +1,12 @@
+// The hole is a probability: the goal is reached with probability P, from options written as decimals.
+dtmc
+
+hole double P in {0.2,0.5,0.75};
+
+module m
+    s : [0..2] init 0;
+    [] s=0 -> P : (s'=1) + 1-P : (s'=2);
+    [] s>0 -> true;
+endmodule
+
+label "goal" = s=1;

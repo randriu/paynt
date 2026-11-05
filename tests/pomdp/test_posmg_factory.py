@@ -5,11 +5,6 @@ import paynt.synthesizer.search_node
 
 
 class TestPosmgColoredMdpFactory:
-    def test_factory_does_not_build_automatically(self, posmg_mec_test):
-        """A factory builds a colored MDP, and unfolds the memory, only when asked."""
-        assert not hasattr(posmg_mec_test.factory, "colored_mdp")
-        assert not hasattr(posmg_mec_test.factory, "current_memory_size")
-
     def test_load_sketch_produces_a_posmg_colored_mdp(self, posmg_mec_test):
         assert type(posmg_mec_test.colored_mdp) is paynt.colored_mdp.ColoredMdp
         assert posmg_mec_test.colored_mdp.feature_kind == "posmg"

@@ -1,15 +1,16 @@
 """Colorings written from scratch with ColoringBuilder, end to end.
 
 The model is a corridor of N = 6 cells. In every cell the agent either walks the slow way (2 time units, 90 % one cell forward, else it stays) or the fast way
-(1 time unit, 50 % two cells forward, 20 % it stays, 30 % back to cell 0), and the property is the expected time to the end. A *policy class* is a coloring:
-which parameter assignment plays which action in which cell. Two are tried:
+(1 time unit, 3 in cell 0, 50 % two cells forward, 20 % it stays, 30 % back to cell 0), and the property is the expected time to the end. A *policy class* is a
+coloring: which parameter assignment plays which action in which cell. Two are tried:
 
 - one parameter per cell, taking `slow` or `fast` -- every color is a conjunction of (parameter == option) pairs, so the builder gives the standard coloring and
   every engine works;
 - one threshold T, `fast` in the cells below T and `slow` from T on -- the colors `T > cell` and `T <= cell` are not conjunctions, so it is a general coloring,
   which OneByOne, CEGIS and SMPMC accept.
 
-The expected times are computed here from the transition probabilities, with numpy, so the expected optimum does not depend on Storm or PAYNT.
+The expected times are computed here from the transition probabilities, with numpy, so the expected optimum does not depend on Storm or PAYNT. The best policy
+is not a threshold policy, so the optimum tells the two classes apart.
 
 The module also checks the builder's formula language against Python on random formulas, and the example of its docstring.
 """
@@ -49,7 +50,8 @@ CORRIDOR = textwrap.dedent("""
 
     rewards "time"
         [slow] true : 2;
-        [fast] true : 1;
+        [fast] x = 0 : 3;
+        [fast] x > 0 : 1;
     endrewards
 
     label "goal" = x = N;
@@ -64,7 +66,7 @@ def expected_time(policy):
         if action == 0:
             cost[cell], outcomes = 2, [(0.9, cell + 1), (0.1, cell)]
         else:
-            cost[cell], outcomes = 1, [(0.5, min(cell + 2, N)), (0.2, cell), (0.3, 0)]
+            cost[cell], outcomes = 3 if cell == 0 else 1, [(0.5, min(cell + 2, N)), (0.2, cell), (0.3, 0)]
         for probability, target in outcomes:
             if target < N:
                 matrix[cell, target] -= probability
@@ -162,6 +164,10 @@ class TestTheColoringsAreWhatTheyShouldBe:
                 for state in range(len(row_groups) - 1):
                     assert sum(selected[choice] for choice in range(row_groups[state], row_groups[state + 1])) == 1
 
+    def test_the_best_policy_is_not_a_threshold_policy(self):
+        assert BEST_PER_CELL == pytest.approx(110 / 9)
+        assert BEST_THRESHOLD == pytest.approx(40 / 3)
+
     def test_the_threshold_plays_fast_below_it_and_slow_from_it_on(self, tmp_path):
         colored_mdp, _task, _coloring = threshold_colored_mdp(tmp_path)
         mdp = colored_mdp.underlying_mdp
@@ -219,9 +225,9 @@ class TestGeneralColoringEngines:
         threshold = result.assignment.parameter_options(0)[0]
         assert expected_time(threshold_policy(threshold)) == pytest.approx(result.value, rel=1e-6)
 
-    @pytest.mark.parametrize(("bound", "satisfiable"), [(9.7, True), (9.6, False)])
+    @pytest.mark.parametrize(("bound", "satisfiable"), [(13.4, True), (13.3, False)])
     def test_the_verdict_on_a_threshold_on_the_time(self, tmp_path, method, bound, satisfiable):
-        """BEST_THRESHOLD, solved with numpy above, is 9.644: 9.7 can be met, 9.6 not."""
+        """A threshold policy takes at least 13.33, so 13.3 cannot be met, although the best policy takes 12.22."""
         colored_mdp, task, _coloring = threshold_colored_mdp(tmp_path, f'R{{"time"}}<={bound} [F "goal"]')
         assert paynt.synthesizer.synthesizer.Synthesizer.for_method(colored_mdp, task, method).run().success is satisfiable
 
