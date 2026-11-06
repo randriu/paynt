@@ -57,9 +57,6 @@ DEADLOCK = {
     engine: "raises ValueError: the coloring enables no choice in state 1" if not engine.endswith("general") else "raises RuntimeError: UnexpectedException"
     for engine in ["onebyone", "cegis", "smpmc", "onebyone, general", "cegis, general", "smpmc, general"]
 }
-# a constraint is taken as satisfied by every design when the scheduler best for it is one design that satisfies the specification
-NOTHING_TO_SPLIT_ON = "raises AssertionError: undecided node has neither cross-constraint disagreement nor any inconsistent property to split on"
-CONSTRAINT_DECIDED_BY_ONE_DESIGN = {"ar": NOTHING_TO_SPLIT_ON, "hybrid": NOTHING_TO_SPLIT_ON}
 
 CASES = [
     case("tests/smpmc-tiny", "sketch.props"),
@@ -72,7 +69,6 @@ CASES = [
     case("tests/objective-optimum-violates-constraint", "sketch.props", known_wrong=CONSTRAINT_AND_OBJECTIVE),
     case("tests/max-reward-infinite-designs", "sketch.props", known_wrong=MAXIMIZED_INFINITE_REWARD),
     case("tests/max-reward-infinite-designs", "lower.props", known_wrong=MAXIMIZED_INFINITE_REWARD),
-    case("tests/constraint-decided-by-one-design", "sketch.props", known_wrong=CONSTRAINT_DECIDED_BY_ONE_DESIGN),
     # families: a design is an MDP
     case("tests/mdp-family-correlated", "sketch.props"),
     case("tests/mdp-family-correlated", "min.props"),

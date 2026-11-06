@@ -1,5 +1,6 @@
-// The same mistake of AR, seen through hybrid. H=1 reaches the goal surely and costs 8/3 on average; H=2 reaches it half of the time, so its expected
-// cost is infinite; H=0 never reaches it. hybrid.props wants the goal reached with probability above 1/4 and a cost below 2.75: only H=1 does both.
+// AR takes a constraint as satisfied by every design when the scheduler best for it is one design that satisfies the whole specification. H=1 reaches
+// the goal surely and costs 8/3 on average; H=2 reaches it half of the time, so its expected cost is infinite; H=0 never reaches it. hybrid.props wants
+// the goal reached with probability above 1/4 and a cost below 2.75: only H=1 does both.
 //
 // At the root, the cheapest scheduler is H=1 alone, which satisfies the whole specification, so the cost constraint is taken as satisfied by every design
 // and the nodes below check the probability only. AR finds H=1 first and stops; hybrid keeps searching after that and accepts H=2.

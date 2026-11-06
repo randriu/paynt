@@ -31,7 +31,7 @@ The models in `models/tests`. "Designs" is the size of the parameter space.
 | `time-energy` | DTMC sketch; `tree.templ`: MDP | 3 / 7; 3 / 9 | 2 / 9; 1 / 5 (depth 0) | time and energy constraints: `sketch.props` feasible, `infeasible.props` not; `optimality.props`: least energy within 4 hours; `tree.props` for trees | multi-constraint splitting, a known AR bug |
 | `objective-optimum-violates-constraint` | DTMC sketch | 3 / 4 | 1 / 2 | `P>=0.9` and `R{"cost"}min` | known AR bug |
 | `max-reward-infinite-designs` | DTMC sketch | 4 / 5 | 1 / 2 | `R{"cost"}max`; `lower.props`: `R>=2.5` | known AR and SMPMC bug |
-| `constraint-decided-by-one-design` | DTMC sketches | 3 / 5; 4 / 8 | 1 / 3 | a probability and a cost constraint | known AR and hybrid bug |
+| `constraint-decided-by-one-design` | DTMC sketch (`hybrid.templ`) | 4 / 8 | 1 / 3 | a probability and a cost constraint | known AR and hybrid bug |
 | `edge-cases` | DTMC sketches | 3 / 3-6 | 1-2 / 1-4 | none: the properties are in `soundness/test_engines.py` | thresholds equal to a value, goals reached at once or never, degenerate holes, a deadlock |
 | `prob-goal` | DTMC sketch; `family.templ`: MDP family | 4 / 5; 3 / 6 | 1 / 2; 1 / 3 | `P>=0 [F "goal"]` | the prob0/prob1 constraint |
 | `mdp-family-avoid-8-2-easy` | MDP family | 21169 / 89776 | 6 / 3584 | `P>0.9` | policy trees, families in SMPMC, the coloring builder |
