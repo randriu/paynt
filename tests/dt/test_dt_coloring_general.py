@@ -11,11 +11,11 @@ import random
 import pytest
 import stormpy
 
-import paynt.parser.sketch
 import paynt.dt._utils
 import paynt.dt.coloring_general
 import paynt.dt.decision_tree
-from helpers.helper import get_sketch_paths
+
+from tests.helpers.models import load_sketch
 
 PROJECTS = ["tests/dt-orchard", "tests/dt-maze"]
 DEPTHS = [0, 1, 2]
@@ -25,8 +25,7 @@ CONSISTENCY_CASES = [("tests/dt-orchard", 0), ("tests/dt-orchard", 1), ("tests/d
 
 
 def load(project, depth):
-    sketch_path, props_path = get_sketch_paths(project)
-    factory, task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path)
+    factory, task = load_sketch(project)
     return factory.reset_tree(depth, general=True), factory.reset_tree(depth, general=False), task
 
 
@@ -79,18 +78,16 @@ class TestSelectionMatchesOnRandomFamilies:
             smt = set(cmdp_smt.coloring.selectCompatibleChoices(sub_smt.native))
             assert general == smt
 
-    def test_random_full_assignment_gives_the_same_specification_result(self, project, depth):
-        cmdp_general, _cmdp_smt, task = load(project, depth)
-        parameter_space = cmdp_general.parameter_space
+    def test_a_random_full_assignment_gives_the_same_markov_chain(self, project, depth):
+        cmdp_general, cmdp_smt, _task = load(project, depth)
         rng = random.Random(depth + 100)
         for _trial in range(5):
-            assignment = parameter_space.copy()
-            for parameter in range(parameter_space.num_parameters):
-                options = parameter_space.parameter_options(parameter)
-                assignment.parameter_set_options(parameter, [rng.choice(options)])
-            dtmc = cmdp_general.build_assignment(assignment)
-            result = dtmc.check_specification(task.specification)
-            assert result.constraints_result is not None
+            assignment = cmdp_general.parameter_space.copy()
+            for parameter in range(assignment.num_parameters):
+                assignment.parameter_set_options(parameter, [rng.choice(assignment.parameter_options(parameter))])
+            general, smt = cmdp_general.build_assignment(assignment), cmdp_smt.build_assignment(assignment)
+            assert general.is_deterministic and smt.is_deterministic
+            assert list(general.underlying_mdp_choice_map) == list(smt.underlying_mdp_choice_map)
 
 
 def load_without_harmonization(project, depth):
@@ -178,8 +175,7 @@ class TestAreChoicesConsistentMatchesColoringSmt:
 
 
 def load_factory(project):
-    sketch_path, props_path = get_sketch_paths(project)
-    factory, _task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path)
+    factory, _task = load_sketch(project)
     return factory
 
 

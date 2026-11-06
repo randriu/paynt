@@ -12,6 +12,7 @@ import paynt.synthesizer.conflict_generator.mdp
 import paynt.parameter_space.parameter_space
 import paynt.parameter_space.smt
 import paynt.parameter_space.constraints
+import paynt.utils.error_handling
 
 import logging
 
@@ -24,10 +25,7 @@ class SynthesizerCEGIS(paynt.synthesizer.synthesizer.Synthesizer):
 
         self.conflict_generator = self.choose_conflict_generator(colored_mdp, task)
 
-        # assert that no reward formula is maximizing
-        assert not self.task.specification.contains_maximizing_reward_properties, (
-            "Cannot use CEGIS for maximizing reward formulae -- consider using AR or hybrid methods."
-        )
+        paynt.utils.error_handling.require_no_maximizing_reward(self.task.specification)
 
         # no constraint unless one is requested via --constraint
         self.constraint = paynt.parameter_space.constraints.build_constraint(task.constraint_name) if task.constraint_name else None

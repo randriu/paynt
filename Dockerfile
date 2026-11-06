@@ -9,6 +9,8 @@ FROM $BASE_IMAGE
 ARG setup_args=""
 # number of threads to use for parallel compilation
 ARG no_threads=2
+# optional dependencies of paynt, e.g. [test]
+ARG options=""
 
 WORKDIR /opt/
 
@@ -20,4 +22,4 @@ RUN apt-get install -y graphviz
 WORKDIR /opt/paynt
 COPY . .
 RUN pip install -r build-requirements.txt
-RUN pip install . --no-build-isolation
+RUN pip install ".${options}" --no-build-isolation

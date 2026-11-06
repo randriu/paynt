@@ -4,14 +4,13 @@ import paynt.pomdp.posmg
 
 
 class TestPosmgSynthesis:
-    def test_synthesize_improves_with_memory_unfolding(self, posmg_test_game_colored_mdp_factory, posmg_test_game_task):
-        """Regression test for the re-unfolding path specifically: test-game's optimum improves from ~0.375 at memory size 1 to ~0.439453 once the optimizing
-        player gets a second memory state, and the specification's tracked optimum reflects it. mec-test wouldn't catch a broken re-unfold here since its
-        observations are all single-state and memory size never changes anything for it.
+    def test_synthesize_improves_with_memory_unfolding(self, posmg_test_game):
+        """A second memory node improves the optimum from 0.375 to 0.4395 (solver output, regression values).
 
-        Synthesis is deterministic, so the synthesized assignment at each memory size is checked too, not just the value it achieves.
+        posmg-mec-test cannot show this: each of its
+        observations is a single state.
         """
-        synthesizer = paynt.pomdp.posmg.PosmgSynthesizer(posmg_test_game_colored_mdp_factory, posmg_test_game_task)
+        synthesizer = paynt.pomdp.posmg.PosmgSynthesizer(posmg_test_game.factory, posmg_test_game.task)
 
         assignment_k1 = synthesizer.synthesize(synthesizer.colored_mdp.parameter_space, print_stats=False)
         optimum_k1 = synthesizer.task.specification.optimality.optimum

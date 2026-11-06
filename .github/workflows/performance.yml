@@ -1,0 +1,47 @@
+name: Performance (latest)
+# Runs the benchmarks of tests/performance on the latest Storm and stormpy and compares them with the earlier weeks
+
+on:
+  schedule:
+    # run weekly
+    - cron: '0 2 * * 6'
+  workflow_dispatch:
+
+jobs:
+  performance:
+    name: Benchmarks on latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    # actions: read to download the history of the earlier runs
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Git clone
+        uses: actions/checkout@v7
+      - name: Build paynt image
+        run: docker build -t paynt-performance . --build-arg BASE_IMAGE=movesrwth/stormpy:ci --build-arg no_threads=4
+      - name: Run Docker
+        run: docker run -d -it --name performance paynt-performance
+      - name: Download the results of earlier runs
+        uses: dawidd6/action-download-artifact@v27
+        with:
+          workflow: performance.yml
+          name: performance-history
+          path: history
+          workflow_conclusion: completed
+          search_artifacts: true
+          if_no_artifact_found: warn
+      - name: Run benchmarks
+        run: |
+          docker exec -e GITHUB_SHA=${{ github.sha }} performance bash -c "cd /opt/paynt; python3 tests/performance/run.py --repeat 3 --output performance.json"
+          docker cp performance:/opt/paynt/performance.json performance.json
+      - name: Compare with earlier runs
+        run: python3 tests/performance/compare.py performance.json --history history/history.jsonl --summary $GITHUB_STEP_SUMMARY
+      - name: Upload the results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: performance-history
+          path: history/history.jsonl
+          retention-days: 90

@@ -17,7 +17,7 @@ from __future__ import annotations
 import paynt.synthesizer.smpmc
 import paynt.synthesizer.synthesizer
 
-from helpers.helper import get_sketch_paths
+from tests.helpers.models import get_sketch_paths
 
 _COSTS_FILE = get_sketch_paths("tests/smpmc-tiny", props_name="sketch.costs")[1]
 
@@ -32,17 +32,17 @@ def _run(colored_mdp, task, threshold, method="smpmc"):
 
 
 class TestCostsConstraintOnSmpmc:
-    def test_exact_cheapest_feasible_combination_is_found_at_its_own_cost(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        result = _run(smpmc_tiny_colored_mdp, smpmc_tiny_task, threshold=25)
+    def test_exact_cheapest_feasible_combination_is_found_at_its_own_cost(self, smpmc_tiny):
+        result = _run(smpmc_tiny.colored_mdp, smpmc_tiny.task, threshold=25)
         assert result.success
         assert str(result.assignment) == "x1=1, x2=4, x3=8"
 
-    def test_one_below_the_cheapest_feasible_cost_is_unsat(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        result = _run(smpmc_tiny_colored_mdp, smpmc_tiny_task, threshold=24)
+    def test_one_below_the_cheapest_feasible_cost_is_unsat(self, smpmc_tiny):
+        result = _run(smpmc_tiny.colored_mdp, smpmc_tiny.task, threshold=24)
         assert not result.success
 
-    def test_a_generous_threshold_is_sat(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        result = _run(smpmc_tiny_colored_mdp, smpmc_tiny_task, threshold=100)
+    def test_a_generous_threshold_is_sat(self, smpmc_tiny):
+        result = _run(smpmc_tiny.colored_mdp, smpmc_tiny.task, threshold=100)
         assert result.success
 
 
@@ -50,11 +50,11 @@ class TestCostsConstraintOnCegis:
     """The same constraint, threaded through the other consumer -- must agree with SMPMC exactly, since both are querying the same underlying combinatorics,
     just via different search strategies."""
 
-    def test_agrees_with_smpmc_at_the_exact_boundary(self, smpmc_tiny_colored_mdp_factory, smpmc_tiny_task):
-        result = _run(smpmc_tiny_colored_mdp_factory.build(), smpmc_tiny_task, threshold=25, method="cegis")
+    def test_agrees_with_smpmc_at_the_exact_boundary(self, smpmc_tiny):
+        result = _run(smpmc_tiny.factory.build(), smpmc_tiny.task, threshold=25, method="cegis")
         assert result.success
         assert str(result.assignment) == "x1=1, x2=4, x3=8"
 
-    def test_agrees_with_smpmc_below_the_boundary(self, smpmc_tiny_colored_mdp_factory, smpmc_tiny_task):
-        result = _run(smpmc_tiny_colored_mdp_factory.build(), smpmc_tiny_task, threshold=24, method="cegis")
+    def test_agrees_with_smpmc_below_the_boundary(self, smpmc_tiny):
+        result = _run(smpmc_tiny.factory.build(), smpmc_tiny.task, threshold=24, method="cegis")
         assert not result.success

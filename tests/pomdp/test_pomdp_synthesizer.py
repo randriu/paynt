@@ -1,37 +1,43 @@
+import json
 import re
 
 import pytest
+import stormpy
 
 import paynt.pomdp
 import paynt.pomdp._utils
+import paynt.pomdp.fsc
 
 
 class TestPomdpSynthesis:
-    def test_synthesize_converges_to_the_known_optimum(self, pomdp_colored_mdp_factory, pomdp_task):
-        """Regression test for the full AR + POMDP-specialized scoring path: this sketch's parameter space (1e10) is small enough that AR fully converges within
-        the test, so the reported optimum is the true value for a 1-node FSC (the fixture's default memory size), not just a snapshot -- and AR's correctness
-        doesn't depend on the splitting heuristic (utils.scoring.estimate_scheduler_difference_pomdp) being right, only on it terminating, so this also catches
-        that free function crashing or looping.
-
-        Since synthesis is deterministic, the actions the assignment picks are checked too (not just the reward value) -- the observation labels embedded in
-        str(assignment) contain incidental tab formatting from stormpy's own label rendering, so only the "=action" side is extracted, avoiding a brittle
-        whitespace-sensitive comparison while still checking the synthesized decision itself.
-        """
-        synthesizer = paynt.pomdp.PomdpSynthesizer(pomdp_colored_mdp_factory, pomdp_task, method="ar")
+    def test_synthesize_converges_to_the_known_optimum(self, pomdp_maze):
+        """The best FSC with one memory node; AR proves it optimal, but the value and the actions are solver output, regression values."""
+        synthesizer = paynt.pomdp.PomdpSynthesizer(pomdp_maze.factory, pomdp_maze.task, method="ar")
         assignment = synthesizer.synthesize(synthesizer.colored_mdp.parameter_space, print_stats=False)
         optimum = synthesizer.task.specification.optimality.optimum
         assert optimum == pytest.approx(71.92884615384588, abs=1e-6)
+        # only the actions: the observation labels are printed with tabs
         chosen_actions = sorted(re.findall(r"=(\w+)", str(assignment)))
         assert chosen_actions == ["down", "left", "right", "right", "up", "up", "up"]
 
-    def test_assignment_to_fsc_and_policy_size_do_not_crash(self, pomdp_colored_mdp_factory, pomdp_task):
-        """Regression test for the paynt.quotient.fsc.FSC -> FscFactored typo bug found during migration:
-
-        assignment_to_fsc used to raise AttributeError (no such name in the fsc module) whenever actually
-        called -- previously unreachable except via SAYNT, so nothing had caught it.
-        """
-        synthesizer = paynt.pomdp.PomdpSynthesizer(pomdp_colored_mdp_factory, pomdp_task, method="ar")
+    def test_the_fsc_attains_the_synthesized_value(self, pomdp_maze):
+        """The Markov chain the FSC induces in the POMDP, model-checked on its own; with one memory node and 8 observations, the FSC has 8 actions and 8
+        memory updates: a size of 16."""
+        synthesizer = paynt.pomdp.PomdpSynthesizer(pomdp_maze.factory, pomdp_maze.task, method="ar")
         assignment = synthesizer.synthesize(synthesizer.colored_mdp.parameter_space, print_stats=False)
         fsc = paynt.pomdp._utils.assignment_to_fsc(synthesizer.colored_mdp.feature_info, assignment)
         assert fsc.num_nodes == 1
         assert paynt.pomdp._utils.policy_size(synthesizer.colored_mdp, assignment) == 16
+        dtmc = paynt.pomdp._utils.get_induced_dtmc_from_fsc(synthesizer.colored_mdp.feature_info, fsc)
+        value = stormpy.model_checking(dtmc, synthesizer.task.get_property().formula).get_value(dtmc.initial_states[0])
+        assert value == pytest.approx(synthesizer.task.specification.optimality.optimum, rel=1e-4)
+
+    @pytest.mark.xfail(strict=True, reason="from_json drops the labels and makes a deterministic FSC stochastic")
+    def test_an_fsc_read_back_from_json_is_the_same(self, pomdp_maze):
+        synthesizer = paynt.pomdp.PomdpSynthesizer(pomdp_maze.factory, pomdp_maze.task, method="ar")
+        assignment = synthesizer.synthesize(synthesizer.colored_mdp.parameter_space, print_stats=False)
+        fsc = paynt.pomdp._utils.assignment_to_fsc(synthesizer.colored_mdp.feature_info, assignment)
+        written = json.loads(json.dumps(fsc.to_json()))
+        read_back = paynt.pomdp.fsc.FscFactored.from_json(written)
+        assert read_back.to_json() == written
+        assert read_back.is_deterministic == fsc.is_deterministic

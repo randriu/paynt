@@ -1,0 +1,142 @@
+mdp
+
+// timing:
+// tick-0:
+//     queue state is observed and state change is planned (pm)
+//     request are generated (if service requester is active)
+// tick-1:
+//     requests are served
+//     state change is executed
+//     service requester changes its state
+//     battery depletes
+
+// initial queue size
+const int q_init = 0;
+
+// ----- synthesized parameters ------------------------------------------------
+
+// requester profiles
+hole int P1 in {0,1,2};
+hole int P2 in {0,1,2};
+hole int P3 in {0,1,2};
+hole int P4 in {0,1,2};
+
+// queue size
+hole int QMAX in {10};
+
+// observation level thresholds
+hole int T1 in {0..4};
+hole int T2 in {5};
+hole int T3 in {6..9};
+
+// switching probabilities
+hole int WP1 in {7..9:1};
+hole int WP2 in {5..7:1};
+
+// ----- modules ---------------------------------------------------------------
+
+
+// clock
+
+module CLOCK
+    c : [0..1] init 0;
+    [tick00] c=0 -> (c'=1);
+    [tick01] c=0 -> (c'=1);
+    [tick02] c=0 -> (c'=1);
+    [tick1] c=1 -> (c'=0);
+endmodule
+
+
+// power manager
+
+module PM
+    pm  :  [0..2] init 0; // 0 - sleep, 1 - idle, 2 - active
+    [tick00] bat=1 -> (pm'=0);
+    [tick01] bat=1 -> (pm'=1);
+    [tick02] bat=1 -> (pm'=2); 
+endmodule
+
+
+// service provider
+
+module SP
+    sp : [0..4] init 0;
+    // 0 - sleep, 1 - idle, 2 - active
+    // waiting states: 3 - sleep to idle, 4 - idle to active
+
+    // immediate transitions - change to lower-energy (or same) state
+    [tick1] sp <= 2 & pm <= sp -> (sp'=pm);
+
+    // transitions through waiting states - change to higher-energy state (sleep to idle or idle to active)
+    [tick1] sp <= 2 & pm > sp -> (sp'=sp+3);
+
+    // waiting states
+    [tick1] sp = 3 -> WP1*0.1 : (sp'=sp-2) + 1-WP1*0.1 : true;
+    [tick1] sp = 4 -> WP2*0.1 : (sp'=sp-2) + 1-WP2*0.1 : true;
+
+endmodule
+
+
+// service requester
+
+module SR
+    sr : [0..1] init 0; // 0 - idle, 1 - active
+    
+    [tick00] bat=1 -> 1: (sr'=0);
+    [tick01] bat=1 -> 1: (sr'=0);
+    [tick02] bat=1 -> 1: (sr'=0);
+
+    [tick1] q <= T1*0.1*QMAX & P1 = 0 -> 0.9: true + 0.1: (sr'=1);
+    [tick1] q <= T1*0.1*QMAX & P1 = 1 -> 0.7: true + 0.3: (sr'=1);
+    [tick1] q <= T1*0.1*QMAX & P1 = 2 -> 0.5: true + 0.5: (sr'=1);
+
+    [tick1] q > T1*0.1*QMAX & q <= T2*0.1*QMAX & P2 = 0 -> 0.8: true + 0.2: (sr'=1);
+    [tick1] q > T1*0.1*QMAX & q <= T2*0.1*QMAX & P2 = 1 -> 0.6: true + 0.4: (sr'=1);
+    [tick1] q > T1*0.1*QMAX & q <= T2*0.1*QMAX & P2 = 2 -> 0.4: true + 0.6: (sr'=1);
+
+    [tick1] q > T2*0.1*QMAX & q <= T3*0.1*QMAX & P3 = 0 -> 0.7: true + 0.3: (sr'=1);
+    [tick1] q > T2*0.1*QMAX & q <= T3*0.1*QMAX & P3 = 1 -> 0.4: true + 0.6: (sr'=1);
+    [tick1] q > T2*0.1*QMAX & q <= T3*0.1*QMAX & P3 = 2 -> 0.2: true + 0.8: (sr'=1);
+
+    [tick1] q > T3*0.1*QMAX & P4 = 0 -> 0.5: true + 0.5: (sr'=1);
+    [tick1] q > T3*0.1*QMAX & P4 = 1 -> 0.3: true + 0.7: (sr'=1);
+    [tick1] q > T3*0.1*QMAX & P4 = 2 -> 0.1: true + 0.9: (sr'=1);
+
+endmodule
+
+
+// service request queue
+
+module SRQ
+    q : [0..10000] init q_init;
+    lost : [0..1] init 0;
+
+    [tick00] sr=1 & q < QMAX -> (q'=q+1); // request
+    [tick01] sr=1 & q < QMAX -> (q'=q+1); // request
+    [tick02] sr=1 & q < QMAX -> (q'=q+1); // request
+
+    [tick00] sr=1 & q = QMAX -> (lost'=1); // request lost
+    [tick01] sr=1 & q = QMAX -> (lost'=1); // request lost
+    [tick02] sr=1 & q = QMAX -> (lost'=1); // request lost
+
+    [tick00] sr!=1 -> true;
+    [tick01] sr!=1 -> true;
+    [tick02] sr!=1 -> true;
+
+    [tick1] sp=2 -> 1: (q'=max(q-1,0)); // serve
+    [tick1] sp!=2 -> true;
+
+endmodule
+
+
+// battery
+
+module BAT
+    bat : [0..2] init 1; // 0 empty, 1 - operational, 2 - failed
+    [tick1] bat=0 -> true;
+    [tick1] bat=1 & sp!=2 -> 0.05 : (bat'=0) + 0.95 : true;
+    [tick1] bat=1 & sp=2 -> 0.05 : (bat'=0) + 0.05 : (bat'=2) + 0.9 : true;
+    [tick1] bat=2 -> true;
+endmodule
+
+label "goal" = (bat = 0 & lost = 0);

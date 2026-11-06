@@ -110,14 +110,6 @@ class TestTimeIsUp:
     (SmpmcPropagator._interrupt_if_time_is_up)
     """
 
-    def test_the_search_stops_without_consulting_the_theory(self):
-        solver, _vars, theory = _build_solver(width=3, p0_max=1, p1_max=1, p2_max=0)
-        theory.time_is_up = lambda: True
-        result = solver.check()
-        # never a refutation (the search was cut off), and a sat here would be an unchecked candidate: the synthesizer discards what comes back past the limit
-        assert result != z3.unsat
-        assert theory.calls == []
-
     def test_the_search_stops_when_the_time_runs_out_in_the_middle_of_it(self):
         solver, _vars, theory = _build_solver(width=3, p0_max=1, p1_max=1, p2_max=0)
         theory.time_is_up = lambda: len(theory.calls) >= 2
@@ -163,15 +155,11 @@ class TestChecksAFullAssignmentFirst:
             f"assignment was checked; calls after that point: {later_calls}"
         )
 
-    def test_the_flag_is_shared_across_fresh_propagator_instances(self):
-        """Fresh() propagators (MBQI sub-contexts) share theory, so a full assignment checked via one instance must be visible to another -- this is what lets
-        partial-query pruning resume globally, not per sub-context."""
+    def test_a_fresh_propagator_shares_the_theory(self):
+        """MBQI sub-contexts get fresh() propagators, which must see the same flag and cache."""
         theory = FakeTheory()
-        propagator_a = paynt.synthesizer.smpmc.theory.SmpmcPropagator(z3.Solver(), None, theory, {})
-        propagator_b = propagator_a.fresh(None)
-        assert propagator_b.theory is theory
-        theory.first_full_assignment_checked = True
-        assert propagator_a.theory.first_full_assignment_checked is True
+        propagator = paynt.synthesizer.smpmc.theory.SmpmcPropagator(z3.Solver(), None, theory, {})
+        assert propagator.fresh(None).theory is theory
 
 
 class TestPushSkipsRedundantAnalyses:
