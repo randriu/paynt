@@ -174,10 +174,6 @@ class PolicyTreeNode(paynt.synthesizer.search_node.SearchNode):
         self.suboptions = []
         self.child_nodes = []
 
-    def merge_children_sat(self) -> None:
-        indices = [i for i, child in enumerate(self.child_nodes) if child.sat is True]
-        self.merge_children_indices(indices)
-
     def merge_children_having_same_solution(self) -> None:
         if self.is_leaf:
             return

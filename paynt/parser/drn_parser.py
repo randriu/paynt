@@ -128,17 +128,16 @@ observations: {num_obs}
         # transition matrix
         desc += "# transition matrix\n\n"
 
+        # every action of every state, written out: the format needs a distribution for each, and the MADP parser takes no * for the action of T
+        # a state with fewer actions repeats its last one, which adds no behaviour
         tm = pomdp.transition_matrix
         for state in range(num_states):
-            action_index = 0
             group_start = tm.get_row_group_start(state)
             group_end = tm.get_row_group_end(state)
-            trivial_action = group_end == group_start + 1
-            for row_index in range(group_start, group_end):
+            for action_index in range(max_num_choices):
+                row_index = min(group_start + action_index, group_end - 1)
                 for entry in tm.get_row(row_index):
-                    action_index_str = action_index if not trivial_action else "*"
-                    desc += f"T: {action_index_str} : {state} : {entry.column} {entry.value}\n"
-                action_index += 1
+                    desc += f"T: {action_index} : {state} : {entry.column} {entry.value}\n"
 
         # observations
         desc += "\n# observations\n\n"
