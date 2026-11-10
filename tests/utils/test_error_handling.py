@@ -13,7 +13,7 @@ import pytest
 
 import paynt.utils.error_handling as error_handling
 
-from helpers.helper import general_colored_mdp, load_colored_mdp
+from tests.helpers.models import general_colored_mdp, load_colored_mdp
 
 # A sparse MDP of four states as Storm lays it out, choices 0 | 1 2 | 3 | 4: state 0 is initial, its choice leads to state 1, whose choices lead to states 2
 # and 3, and states 2 and 3 lead to 3.

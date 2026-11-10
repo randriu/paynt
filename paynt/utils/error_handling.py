@@ -1,7 +1,7 @@
 """The errors for what a coloring, a specification, a sketch or a synthesis method cannot do, kept out of the classes that come across them so that those stay
 short: a state that a coloring leaves without a choice, what an incomplete coloring does not support (a full parameter assignment that leaves several choices
 enabled, see paynt.colored_mdp), a general coloring where the (parameter, option) pairs are needed, a hole where a sketch cannot have one (the reward of a
-state, a label), and a method that a feature does not run."""
+state, a label), a specification that an engine does not support, and a method that a feature does not run."""
 
 from __future__ import annotations
 
@@ -73,6 +73,22 @@ def require_single_property_on_nondeterministic_model(model: paynt.model.model.M
             f"cannot check {specification.num_properties} properties on a model that still has nondeterminism: when a parameter assignment leaves several "
             "choices enabled (an incomplete coloring, or an MDP family, whose policy is not a parameter), each property would be given a policy of its own for "
             "them, so only a single property is supported"
+        )
+
+
+def require_no_maximizing_reward(specification: paynt.specification.property.Specification) -> None:
+    """Raise NotImplementedError if the specification maximizes a reward (an objective, or a constraint R>= or R>), which CEGIS, and hybrid with it, does not
+    support."""
+    if specification.contains_maximizing_reward_properties:
+        raise NotImplementedError("CEGIS (also inside hybrid) does not support maximizing reward properties; use --method ar, onebyone or smpmc")
+
+
+def require_single_property(specification: paynt.specification.property.Specification) -> None:
+    """Raise NotImplementedError if the specification has several properties, which SMPMC does not support."""
+    if specification.num_properties > 1:
+        raise NotImplementedError(
+            "SMPMC currently supports a single property: either one plain threshold constraint or one optimality objective, not both together and not "
+            "several constraints at once"
         )
 
 

@@ -1,0 +1,112 @@
+// Simplified model of a mars rover
+// Encoding by Tim Quatmann and Sebastian Junges
+// RWTH Aachen University
+
+mdp
+
+
+const int num_tasks = 4;
+
+// time (in minutes)
+//const int time_low = 5;
+//const int time_medium = 8;
+//const int time_high = 10;
+
+// Energy (in percent)
+//const double energy_low = 0.99;
+//const double energy_medium = 0.95;
+//const double energy_high = 0.9; 
+
+hole int energy_low in {9990..9995};
+hole int energy_medium in {9970..9995:5};
+hole int energy_high in {994..999};
+
+// Scientific Value
+//const int value_low = 2;
+//const int value_medium = 10;
+//const int value_high = 30;
+
+hole int value_low in {0..5:1};
+hole int value_medium in {20..30:2};
+hole int value_high in {75..100:5};
+
+// Success probabilities
+//const double task1_success_pr = 0.5;
+//const double task2_success_pr = 0.6;
+//const double task3_success_pr = 0.8;
+//const double task4_success_pr = 0.2;
+
+hole int task1_success_pr in {4..6};
+hole int task2_success_pr in {5..7};
+hole int task3_success_pr in {8..10};
+hole int task4_success_pr in {1..3};
+
+formula low_time_task = (task=2 | task=3);
+formula medium_time_task = false;
+formula high_time_task = (task=1 | task=4);
+
+formula low_energy_task = (task=1 | task=3);
+formula medium_energy_task = (task=2);
+formula high_energy_task = (task=4);
+
+formula low_value_task = (task=3);
+formula medium_value_task = (task=1 | task=2);
+formula high_value_task = (task=4);
+
+module rover
+	// The current task (0 means no task)
+	task : [0..num_tasks] init 0;
+	success : bool init false;
+	
+	[task1_start] task=0 -> task1_success_pr*0.1 : (task'=1) & (success'=true) + (1-task1_success_pr*0.1) : (task'=1) & (success'=false);
+	[task2_start] task=0 -> task2_success_pr*0.1 : (task'=2) & (success'=true) + (1-task2_success_pr*0.1) : (task'=2) & (success'=false);
+	[task3_start] task=0 -> task3_success_pr*0.1 : (task'=3) & (success'=true) + (1-task3_success_pr*0.1) : (task'=3) & (success'=false);
+	[task4_start] task=0 -> task4_success_pr*0.1 : (task'=4) & (success'=true) + (1-task4_success_pr*0.1) : (task'=4) & (success'=false);
+
+	[task_done] task>0 -> (task'= 0) & (success'=false);
+endmodule
+
+
+
+module battery
+	increased_energy : bool init false;
+	empty: bool init false;
+	
+	[task1_start] !empty -> 0.5 : (increased_energy' = false) + (0.5) : (increased_energy' = true);
+	[task2_start] !empty -> 0.5 : (increased_energy' = false) + (0.5) : (increased_energy' = true);
+	[task3_start] !empty -> 0.5 : (increased_energy' = false) + (0.5) : (increased_energy' = true);
+	[task4_start] !empty -> (increased_energy' = false);
+	[task_done] !empty & low_energy_task    & !increased_energy -> energy_low*0.0001 : (increased_energy' = false) + (1-energy_low*0.0001) : (empty'=true);
+	[task_done] !empty & low_energy_task    &  increased_energy -> energy_medium*0.0001 : (increased_energy' = false) + (1-energy_medium*0.0001) : (empty'=true);
+	[task_done] !empty & medium_energy_task & !increased_energy -> energy_medium*0.0001 : (increased_energy' = false) + (1-energy_medium*0.0001) : (empty'=true);
+	[task_done] !empty & medium_energy_task &  increased_energy -> energy_high*0.001 : (increased_energy' = false) + (1-energy_high*0.001) : (empty'=true);
+	[task_done] !empty & high_energy_task   & !increased_energy -> energy_high*0.001 : (increased_energy' = false) + (1-energy_high*0.001) : (empty'=true);
+	[task_done] !empty & high_energy_task   &  increased_energy -> energy_high*0.001 : (increased_energy' = false) + (1-energy_high*0.001) : (empty'=true);
+endmodule
+ 
+
+module value_counting_module
+	val : [0..1000] init 0;
+	[task_done] low_value_task -> (val'=min(1000,val + (success ? value_low : 0)));
+	[task_done] medium_value_task -> (val'=min(1000,val + (success ? value_medium : 0)));
+	[task_done] high_value_task -> (val'=min(1000,val + (success ? value_high : 0)));
+endmodule
+
+//rewards "time"
+//	[task_done] low_time_task : time_low;
+//	[task_done] medium_time_task : time_medium;
+//	[task_done] high_time_task : time_high;
+//endrewards
+//
+//rewards "energy"
+//	[task_done] low_energy_task & !increased_energy : energy_low;
+//	[task_done] low_energy_task &  increased_energy : energy_medium;
+//	[task_done] medium_energy_task & !increased_energy : energy_medium;
+//	[task_done] medium_energy_task &  increased_energy : energy_high;
+//	[task_done] high_energy_task & !increased_energy : energy_high;
+//	[task_done] high_energy_task &  increased_energy : energy_high;
+//endrewards
+
+
+label "goal" = val = 1000;
+

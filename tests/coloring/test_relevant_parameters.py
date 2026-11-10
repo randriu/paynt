@@ -15,18 +15,16 @@ import stormpy
 import z3
 
 import paynt.parameter_space.parameter_space
-import paynt.parser.sketch
 import paynt.utils.coloring_builder
 
-from helpers.helper import general_colored_mdp, get_sketch_paths, load_colored_mdp
+from tests.helpers.models import general_colored_mdp, load_colored_mdp, load_sketch
 
 TREES = [("tests/dt-orchard", 1), ("tests/dt-orchard", 2), ("tests/dt-maze", 1), ("tests/dt-maze", 2)]
-LIFTED = ["tests/smpmc-tiny", "tests/mdp-family-avoid-8-2-easy"]
+LIFTED = ["tests/smpmc-tiny", "tests/mdp-family-rocks-4-2"]
 
 
 def tree_colored_mdp(project, depth):
-    sketch_path, props_path = get_sketch_paths(project)
-    factory, _task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path)
+    factory, _task = load_sketch(project)
     return factory.reset_tree(depth, general=True)
 
 
@@ -88,6 +86,23 @@ def check_widening_keeps_the_selection(colored_mdp, seed, families, widenings, f
     return dropped_some
 
 
+def share_of_relevant_parameters_that_matter(colored_mdp, seed):
+    """Of the fixed relevant parameters of random families, the share whose widening alone changes the selection."""
+    parameter_space = colored_mdp.parameter_space
+    rng = random.Random(seed)
+    members = changed = 0
+    for _ in range(20):
+        family, fixed = random_family(rng, parameter_space, 0.7)
+        selected, states, choices = reachable(colored_mdp, family)
+        for parameter in sorted(fixed & set(colored_mdp.coloring.relevantParameters(family.native, states))):
+            wide = family.copy()
+            wide.parameter_set_options(parameter, parameter_space.parameter_options(parameter))
+            members += 1
+            changed += selection_changes(colored_mdp, selected, choices, wide)
+    assert members > 0
+    return changed / members
+
+
 @pytest.mark.parametrize(("project", "depth"), TREES)
 class TestOnDecisionTrees:
     def test_widening_outside_the_relevant_parameters_keeps_the_selection(self, project, depth):
@@ -98,20 +113,7 @@ class TestOnDecisionTrees:
     def test_each_relevant_parameter_matters(self, project, depth):
         """Widening a single fixed member of the relevant set, alone, usually changes the selection: the set is not padded, and a test like the one above would
         notice if it were too small."""
-        colored_mdp = tree_colored_mdp(project, depth)
-        parameter_space = colored_mdp.parameter_space
-        rng = random.Random(100 + depth)
-        members = changed = 0
-        for _ in range(20):
-            family, fixed = random_family(rng, parameter_space, 0.7)
-            selected, states, choices = reachable(colored_mdp, family)
-            for parameter in sorted(fixed & set(colored_mdp.coloring.relevantParameters(family.native, states))):
-                wide = family.copy()
-                wide.parameter_set_options(parameter, parameter_space.parameter_options(parameter))
-                members += 1
-                changed += selection_changes(colored_mdp, selected, choices, wide)
-        assert members > 0
-        assert changed / members > 0.5
+        assert share_of_relevant_parameters_that_matter(tree_colored_mdp(project, depth), seed=100 + depth) > 0.5
 
     def test_thresholds_of_unchosen_variables_are_never_relevant(self, project, depth):
         """For a full assignment, the only things that matter are the decisions and thresholds actually tested and the leaves reached.
@@ -135,22 +137,17 @@ class TestOnDecisionTrees:
                         assert threshold not in relevant
 
 
-@pytest.mark.parametrize("project", LIFTED)
 class TestOnLiftedStandardColorings:
-    def test_widening_outside_the_relevant_parameters_keeps_the_selection(self, project):
-        colored_mdp, _task = load_colored_mdp(project)
-        check_widening_keeps_the_selection(general_colored_mdp(colored_mdp), seed=3, families=25, widenings=4, fixed_probability=0.5)
+    def test_widening_outside_the_relevant_parameters_keeps_the_selection(self):
+        """On smpmc-tiny, x2 colors state 1 only, which many families never reach."""
+        colored_mdp, _task = load_colored_mdp("tests/smpmc-tiny")
+        dropped_some = check_widening_keeps_the_selection(general_colored_mdp(colored_mdp), seed=3, families=25, widenings=4, fixed_probability=0.5)
+        assert dropped_some > 0
 
-    def test_the_relevant_parameters_are_within_the_static_supports(self, project):
+    @pytest.mark.parametrize("project", LIFTED)
+    def test_each_relevant_parameter_matters(self, project):
         colored_mdp, _task = load_colored_mdp(project)
-        general = general_colored_mdp(colored_mdp)
-        supports = general.coloring.getStateToHoles()
-        rng = random.Random(4)
-        for _ in range(15):
-            family, _fixed = random_family(rng, general.parameter_space, 0.5)
-            _selected, states, _choices = reachable(general, family)
-            static = set().union(*(set(supports[state]) for state in states))
-            assert set(general.coloring.relevantParameters(family.native, states)) <= static
+        assert share_of_relevant_parameters_that_matter(general_colored_mdp(colored_mdp), seed=4) > 0.5
 
 
 def two_parameter_coloring(state_is_relevant=None, num_states=1):

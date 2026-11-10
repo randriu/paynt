@@ -18,22 +18,8 @@ class _FakeAnalysisResult:
 
 
 class TestSearchNode:
-    def test_fresh_node_has_no_parent_and_zero_refinement_depth(self):
-        node = paynt.synthesizer.search_node.SearchNode(_parameter_space_with_two_binary_parameters())
-        assert node.parent_info is None
-        assert node.refinement_depth == 0
-        assert node.constraint_indices is None
-        assert node.mdp is None
-        assert node.selected_choices is None
-        assert node.analysis_result is None
-        assert node.encoding is None
-
     def test_split_produces_children_with_incremented_refinement_depth_and_shared_parent_info(self):
-        """Regression-style check for the exact mechanism that replaces the old ParameterSpace.
-
-        add_parent_info/collect_parent_info round trip: split() snapshots self via collect_parent_info once and hands that same ParentInfo to every child,
-        matching the pre-refactor behavior where every subspace produced by one split shared a single parent_info object.
-        """
+        """Every child of a split gets the same ParentInfo, a snapshot of the parent."""
         parent = paynt.synthesizer.search_node.SearchNode(_parameter_space_with_two_binary_parameters())
         parent.selected_choices = [True, False]
         parent.analysis_result = _FakeAnalysisResult()

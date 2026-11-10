@@ -2,93 +2,86 @@ import pytest
 import stormpy
 
 import paynt.dt
-import paynt.dt.dtnest.task
-import paynt.model.model_builder
-import paynt.task
-import paynt.utils.timer
 
-from helpers.helper import get_sketch_paths
+from tests.helpers.models import get_sketch_paths, load_sketch
+from tests.helpers.reference import read_properties
 
 
 class TestDtSynthesis:
-    def test_split_undecided_space_survives_a_multi_property_specification(self):
-        """
-        Regression test: scheduler_choices is only ever populated by ColoredMdp.scheduler_is_consistent's "dt" branch
-        when the specification is single-property (see split_undecided_space/verify_parameter_space's guards) -- for any
-        specification with more than one property (a constraint alongside the optimality objective, as
-        constructed here), it stays None on every parameter space. split_undecided_space used to copy it unconditionally
-        (parent_info.scheduler_choices = parameter_space.scheduler_choices) and verify_parameter_space used to
-        iterate it unconditionally too, so the very first split of a multi-property parameter space raised
-        AttributeError -- silently never caught because every DT sketch actually used elsewhere in this
-        suite happens to be single-property.
-        """
-        sketch_path, _ = get_sketch_paths("tests/dt-orchard")
-        prism = stormpy.parse_prism_program(sketch_path, prism_compatibility=True)
-        # a trivially-true constraint alongside the real optimality objective: enough to make
-        # is_single_property False without changing what the "right" answer is
-        properties = stormpy.parse_properties('P>=0 [F "goal"]; Pmax=? [F "goal"]', prism)
-        assert len(properties) == 2
-
-        explicit_model = paynt.model.model_builder.ModelBuilder.from_prism(prism, None, False)
-        task = paynt.task.SynthesisTask(properties, timeout=15)
-        build_task = paynt.dt.dtnest.task.DtNestTask(error_threshold=0.05, tree_depth=2)
-        assert not task.specification.is_single_property
-
-        factory = paynt.dt.DtColoredMdpFactory(explicit_model, build_task)
-        synthesizer = paynt.dt.DtSynthesizer(factory, task)
-        synthesizer.synthesize_tree(depth=2, timeout=15)
-        assert synthesizer.best_tree is not None
-
-    def test_split_undecided_space_survives_a_genuinely_multi_constraint_specification(self):
-        """
-        Regression coverage for the multi-constraint AR splitting gap (paper https://www.jair.org/index.php/jair/article/view/16593 Section 3.3): unlike
-        test_split_undecided_space_survives_a_multi_property_specification above (one trivially-true
-        constraint alongside optimality, which resolves before ever reaching split_undecided_space's new
-        L(h)/undecided_results() logic in any interesting way), this specification has TWO real constraints
-        and NO optimality objective, forcing split_undecided_space to actually run its new
-        compute_incompatibility_levels/undecided_results() code paths repeatedly.
-
-        dt-orchard's only event is "goal", so two P>=x[F "goal"] constraints at different thresholds don't
-        produce genuine cross-constraint disagreement (both push toward the same underlying policy) -- this
-        model can't exercise the L(h) tier specifically (that needs constraints on genuinely different
-        criteria, like easy.props's two different reward structures in
-        tests/synthesizer/test_synthesizer_ar.py). What it does confirm: neither harmonize_inconsistent_
-        scheduler nor split_undecided_space crashes or hangs when node.analysis_result.constraints_result has
-        2 undecided entries, and the search genuinely explores (unlike a trivially-resolved-at-the-root spec).
-        Bounded rather than run to completion -- this threshold has no admissible tree within a few seconds
-        on this model, confirmed manually, and this test only cares about "does not crash", not convergence.
-        """
-        sketch_path, _ = get_sketch_paths("tests/dt-orchard")
-        prism = stormpy.parse_prism_program(sketch_path, prism_compatibility=True)
-        properties = stormpy.parse_properties('P>=0.55 [F "goal"]; P>=0.5 [F "goal"]', prism)
-        assert len(properties) == 2
-
-        explicit_model = paynt.model.model_builder.ModelBuilder.from_prism(prism, None, False)
-        task = paynt.task.SynthesisTask(properties, timeout=8)
-        build_task = paynt.dt.dtnest.task.DtNestTask(error_threshold=0.05, tree_depth=2)
-        assert len(task.specification.constraints) == 2
-        assert task.specification.optimality is None
-
-        factory = paynt.dt.DtColoredMdpFactory(explicit_model, build_task)
-        synthesizer = paynt.dt.DtSynthesizer(factory, task)
-        paynt.utils.timer.GlobalTimer.start(8)
-        try:
-            synthesizer.synthesize_tree(depth=2, timeout=8)
-        finally:
-            paynt.utils.timer.GlobalTimer.start()
-
-    def test_synthesize_finds_the_known_optimum(self, dt_colored_mdp_factory, dt_task):
-        """Regression test for DtSynthesizer.split_undecided_space/scheduler_scores (the search-policy methods moved off the factory during this migration).
-        Kept at depth 0 deliberately: full AR-based tree synthesis is combinatorially expensive on this model at higher depths (which is exactly why
-        get_dt_with_api.py uses dtnest's subtree-based search instead of plain synthesize_tree for real use) -- but dtnest's subtree calls go through this same
-        split_undecided_space override internally, and that path is already verified end-to-end (byte-identical value 0.6313574509764854) via
-        get_dt_with_api.py.
-
-        Since synthesis is deterministic, the tree itself (not just its value) is checked too: at depth 0 the only admissible tree is a single leaf, so its
-        string form is a one-line action label.
-        """
-        synthesizer = paynt.dt.DtSynthesizer(dt_colored_mdp_factory, dt_task)
+    def test_synthesize_finds_the_known_optimum(self, dt_orchard):
+        """At depth 0 a tree is a single leaf: the best one is `roll`."""
+        synthesizer = paynt.dt.DtSynthesizer(dt_orchard.factory, dt_orchard.task)
         synthesizer.synthesize_tree(depth=0)
         assert synthesizer.best_tree is not None
+        # SMPMC finds the same, see test_smpmc_inner_engine.py
         assert synthesizer.best_tree_value == pytest.approx(0.48450450140758644, abs=1e-6)
         assert synthesizer.best_tree.to_string() == "roll\n"
+
+
+class TestTwoConstraints:
+    """The trips of models/tests/time-energy as trees: with tree.props the two stages need different speeds."""
+
+    def synthesize(self, depth):
+        factory, task = load_sketch("tests/time-energy", sketch_name="tree.templ", props_name="tree.props")
+        synthesizer = paynt.dt.DtSynthesizer(factory, task)
+        synthesizer.synthesize_tree(depth)
+        return synthesizer.best_tree
+
+    def test_no_tree_of_depth_0_satisfies_both(self):
+        assert self.synthesize(0) is None
+
+    def test_a_tree_of_depth_1_drives_one_stage_fast(self):
+        tree = self.synthesize(1)
+        leaves = sorted(tree.action_labels[leaf.action] for leaf in tree.collect_terminals())
+        assert leaves in (["fast", "medium"], ["__random__", "fast"])
+
+    @pytest.mark.xfail(strict=True, raises=AssertionError, reason="AR drops the root: the tree best for the energy alone drives slowly, which takes 6 hours")
+    def test_the_least_energy_of_a_trip_of_4_hours_is_4(self):
+        """optimality.props: at most 4 hours, the least energy, at depth 0."""
+        factory, task = load_sketch("tests/time-energy", sketch_name="tree.templ", props_name="optimality.props")
+        synthesizer = paynt.dt.DtSynthesizer(factory, task)
+        synthesizer.synthesize_tree(0)
+        assert synthesizer.best_tree_value == pytest.approx(4.0)
+
+
+def tree_scheduler_value(tmp_path, project, depth, sketch_name="sketch.templ", props_name="sketch.props", **task_kwargs):
+    """(the value of the tree, the value of the model with the tree's to_prism module added to the sketch, which synchronizes on the actions)."""
+    factory, task = load_sketch(project, sketch_name=sketch_name, props_name=props_name, task_kwargs=task_kwargs)
+    synthesizer = paynt.dt.DtSynthesizer(factory, task)
+    synthesizer.synthesize_tree(depth)
+    sketch_path, props_path = get_sketch_paths(project, sketch_name, props_name)
+    with open(sketch_path) as file:
+        (tmp_path / "scheduled.prism").write_text(file.read() + "\n" + synthesizer.best_tree.to_prism())
+    program = stormpy.parse_prism_program(str(tmp_path / "scheduled.prism"), prism_compatibility=True)
+    prop = stormpy.parse_properties(read_properties(props_path)[0], program)[0]
+    model = stormpy.build_model(program, [prop])
+    return synthesizer.best_tree_value, stormpy.model_checking(model, prop).get_value(model.initial_states[0])
+
+
+class TestExportToPrism:
+    def test_the_scheduler_of_a_tree_has_its_value(self, tmp_path):
+        tree_value, scheduler_value = tree_scheduler_value(tmp_path, "tests/dt-maze", depth=2)
+        assert scheduler_value == pytest.approx(tree_value, rel=1e-4)
+
+    @pytest.mark.xfail(strict=True, raises=AssertionError, reason="the guards of the tree block place in the initial state, which the tree does not decide")
+    def test_the_scheduler_leaves_the_actions_of_other_states_alone(self, tmp_path):
+        tree_value, scheduler_value = tree_scheduler_value(tmp_path, "tests/dt-maze", depth=1)
+        assert scheduler_value == pytest.approx(tree_value, rel=1e-4)
+
+    @pytest.mark.xfail(strict=True, raises=RuntimeError, reason="s takes the values 0 and 1, so it is written as a boolean: s, !(s)")
+    def test_an_integer_with_the_values_0_and_1_stays_an_integer(self, tmp_path):
+        """The trip of time-energy without the don't-care action: at depth 1, one stage fast and the other at medium speed take 3 hours."""
+        trip = {"sketch_name": "tree.templ", "props_name": "tree.props", "add_dont_care_action": False}
+        _tree_value, time = tree_scheduler_value(tmp_path, "tests/time-energy", depth=1, **trip)
+        assert time == pytest.approx(3)
+
+
+@pytest.mark.xfail(strict=True, raises=RuntimeError, reason="the choices of the states that no tree decides are dropped, so the initial state has none")
+def test_a_scheduler_from_a_file_is_mapped_to_a_tree(tmp_path):
+    """The optimal scheduler of dt-maze, written by Storm, given as --tree-map-scheduler."""
+    factory, task = load_sketch("tests/dt-maze")
+    mdp = factory.build().underlying_mdp
+    scheduler = stormpy.model_checking(mdp, task.get_property().formula, extract_scheduler=True).get_scheduler()
+    (tmp_path / "scheduler.json").write_text(scheduler.to_json_str(mdp))
+    factory, task = load_sketch("tests/dt-maze", task_kwargs={"scheduler_path": str(tmp_path / "scheduler.json")})
+    assert paynt.dt.DtSynthesizer(factory, task).run().success

@@ -11,17 +11,10 @@ import z3
 
 import paynt.parameter_space.bitvec
 import paynt.parameter_space.constraints
-import paynt.parser.sketch
 import paynt.synthesizer.synthesizer
 from paynt.parameter_space.constraints.constraint import ConstraintContext
 
-from helpers.helper import get_sketch_paths
-
-
-def load_prob_goal(sketch_name):
-    sketch_path, props_path = get_sketch_paths("tests/prob-goal", sketch_name=sketch_name)
-    factory, task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path)
-    return factory.build(), task
+from tests.helpers.models import load_colored_mdp
 
 
 def accepted_assignments(colored_mdp, task, constraint_name):
@@ -50,14 +43,14 @@ class TestClauses:
         ],
     )
     def test_admit_exactly_the_assignments_reaching_the_goal(self, sketch_name, constraint_name, expected):
-        colored_mdp, task = load_prob_goal(sketch_name)
+        colored_mdp, task = load_colored_mdp("tests/prob-goal", sketch_name=sketch_name)
         assert accepted_assignments(colored_mdp, task, constraint_name) == expected
 
     @pytest.mark.parametrize("constraint_name", ["prob0", "prob1"])
-    def test_admit_exactly_the_assignments_reaching_the_goal_on_smpmc_tiny(self, smpmc_tiny_colored_mdp, smpmc_tiny_task, constraint_name):
+    def test_admit_exactly_the_assignments_reaching_the_goal_on_smpmc_tiny(self, smpmc_tiny, constraint_name):
         # every assignment reaches "done" with probability 0 or 1
         expected = {"x1=1, x2=4, x3=8", "x1=4, x2=3, x3=8", "x1=4, x2=4, x3=8"}
-        assert accepted_assignments(smpmc_tiny_colored_mdp, smpmc_tiny_task, constraint_name) == expected
+        assert accepted_assignments(smpmc_tiny.colored_mdp, smpmc_tiny.task, constraint_name) == expected
 
 
 @pytest.mark.parametrize("method", ["smpmc", "cegis"])
@@ -71,7 +64,7 @@ class TestEngines:
         ],
     )
     def test_find_the_only_admitted_assignment(self, method, sketch_name, constraint_name, expected):
-        colored_mdp, task = load_prob_goal(sketch_name)
+        colored_mdp, task = load_colored_mdp("tests/prob-goal", sketch_name=sketch_name)
         task.constraint_name = constraint_name
         result = paynt.synthesizer.synthesizer.Synthesizer.for_method(colored_mdp, task, method).run()
         if expected is None:

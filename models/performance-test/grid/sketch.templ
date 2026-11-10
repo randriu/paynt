@@ -1,0 +1,95 @@
+dtmc
+
+hole int M_0_1 in {0,1,2,3};
+hole int M_1_1 in {0,1,2,3};
+hole int M_2_1 in {0,1,2,3};
+hole int M_3_1 in {0,1,2,3};
+hole int P_0_1 in {1,2,3,4};
+hole int P_1_1 in {1,2,3,4};
+hole int P_2_1 in {1,2,3,4};
+hole int P_3_1 in {1,2,3,4};
+
+const int CMAX = 40;
+//const double THRESHOLD;
+
+module countermodule
+    c : [0..CMAX] init 0;
+    [p] true -> (c'=min(c+1,CMAX));
+endmodule
+
+
+module strategy
+	pick : [0..4] init 0;
+	mem : [0..3] init 0;
+	[p] pick = 0 & mem = 0 & o = 1 -> (mem'=M_0_1) & (pick'=P_0_1);
+	[p] pick = 0 & mem = 1 & o = 1 -> (mem'=M_1_1) & (pick'=P_1_1);
+	[p] pick = 0 & mem = 2 & o = 1 -> (mem'=M_2_1) & (pick'=P_2_1);
+	[p] pick = 0 & mem = 3 & o = 1 -> (mem'=M_3_1) & (pick'=P_3_1);
+	[north] pick=1 -> (pick'=0);
+	[east] pick=2 -> (pick'=0);
+	[south] pick=3 -> (pick'=0);
+	[west] pick=4 -> (pick'=0);
+endmodule
+
+module grid
+
+	x : [0..3]; // x coordinate
+	y : [0..3]; // y coordinate
+	o : [0..3]; // observables
+	// 0 - initial observation
+	// 1 - in the grid (not target)
+	// 2 - observe target
+	// 3 - bad state
+
+	// initially randomly placed within the grid (not at the target)
+	[] o=0 -> 1/14 : (o'=1) & (x'=0) & (y'=0)
+			+ 1/14 : (o'=1) & (x'=0) & (y'=1)
+			+ 1/14 : (o'=1) & (x'=0) & (y'=2)
+			+ 1/14 : (o'=1) & (x'=0) & (y'=3)
+			+ 1/14 : (o'=1) & (x'=1) & (y'=0)
+			//+ 1/15 : (o'=1) & (x'=1) & (y'=1)
+			+ 1/14 : (o'=1) & (x'=1) & (y'=2)
+			+ 1/14 : (o'=1) & (x'=1) & (y'=3)
+			+ 1/14 : (o'=1) & (x'=2) & (y'=0)
+			+ 1/14 : (o'=1) & (x'=2) & (y'=1)
+			+ 1/14 : (o'=1) & (x'=2) & (y'=2)
+			+ 1/14 : (o'=1) & (x'=2) & (y'=3)
+			// + 1/15 : (o'=1) & (x'=3) & (y'=0) this is the traget
+			+ 1/14 : (o'=1) & (x'=3) & (y'=1)
+			+ 1/14 : (o'=1) & (x'=3) & (y'=2)
+			+ 1/14 : (o'=1) & (x'=3) & (y'=3);
+
+	// move around the grid
+	[east] o=1 & !(x=2 & y=0) &!(x=0 & y=1) -> 0.9: (x'=min(x+1,3)) + 0.1: (x'=x)&(y'=y)&(o'=o); // not reached target
+	[east] o=1 & x=0 & y=1 -> 0.9: (x'=1) & (o'=3) + 0.1: (x'=x)&(y'=y)&(o'=o); // reached bad state
+	[east] o=1 & x=2 & y=0 -> 0.9: (x'=min(x+1,3)) & (o'=2) + 0.1: (x'=x)&(y'=y)&(o'=o); // reached target
+
+	[west] o=1 & !(x=2 & y=1) -> 0.9: (x'=max(x-1,0)) + 0.1: (x'=x)&(y'=y)&(o'=o); // not reached target
+	[west] o=1 & x=2 & y=1 -> 0.9: (x'=1) & (o'=3) + 0.1: (x'=x)&(y'=y)&(o'=o); // reached bad state
+
+	[north] o=1 & !(x=1 & y=0)-> 0.9: (y'=min(y+1,3)) + 0.1: (x'=x)&(y'=y)&(o'=o); // reached target
+	[north]	o=1 & (x=1 & y=0) -> 0.9: (y'=1) & (o'=3) + 0.1: (x'=x)&(y'=y)&(o'=o); //reached bad state
+
+	[south] o=1 & !(x=3 & y=1) & !(x=1 & y=2) -> 0.9: (y'=max(y-1,0)) + 0.1: (x'=x)&(y'=y)&(o'=o); // not reached target
+	[south] o=1 & x=3 & y=1 -> 0.9: (y'=max(y-1,0)) & (o'=2) + 0.1: (x'=x)&(y'=y)&(o'=o); // reached target
+	[south] o=1 & x=1 & y=2 -> 0.9: (y'=1) & (o'=3) + 0.1: (x'=x)&(y'=y)&(o'=o); //reached bad state
+
+	// reached target
+	[done] o=2 -> true;
+
+	//reached bad state
+	[bad] o=3 -> true;
+
+endmodule
+
+// reward structure for number of steps to reach the target
+rewards
+        [east] true : 1;
+        [west] true : 1;
+        [north] true : 1;
+        [south] true : 1;
+endrewards
+
+// target observation
+label "goal" = o=2;
+label "bad" = o=3;

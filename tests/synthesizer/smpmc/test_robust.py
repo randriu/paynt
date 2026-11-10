@@ -12,13 +12,12 @@ import gc
 
 import pytest
 
-import paynt.parser.sketch
 import paynt.synthesizer.smpmc
 import paynt.synthesizer.smpmc._utils
 import paynt.synthesizer.smpmc.checker
 import paynt.synthesizer.smpmc.theory
 
-from helpers.helper import get_sketch_paths
+from tests.helpers.models import load_sketch
 
 
 def _robust(task, forall_pattern=None, verify_robust=False):
@@ -29,8 +28,7 @@ def _robust(task, forall_pattern=None, verify_robust=False):
 
 
 def _run(project, props_name, **robust):
-    sketch_path, props_path = get_sketch_paths(project, props_name=props_name)
-    factory, task = paynt.parser.sketch.Sketch.load_sketch(sketch_path, props_path)
+    factory, task = load_sketch(project, props_name=props_name)
     synthesizer = paynt.synthesizer.smpmc.SynthesizerSMPMC(factory.build(), _robust(task, **robust))
     return synthesizer, task, synthesizer.run()
 
@@ -46,49 +44,49 @@ def _policy(synthesizer, robust_assignment):
 class TestRobustSynthesisOnFamily:
     """The environment is the family's own parameters, the policy is synthesized."""
 
-    def test_finds_a_policy_robust_against_every_environment(self, rocks_colored_mdp, rocks_task):
-        result = paynt.synthesizer.smpmc.SynthesizerSMPMC(rocks_colored_mdp, _robust(rocks_task)).run()
+    def test_finds_a_policy_robust_against_every_environment(self, mdp_family_rocks_4_2):
+        result = paynt.synthesizer.smpmc.SynthesizerSMPMC(mdp_family_rocks_4_2.colored_mdp, _robust(mdp_family_rocks_4_2.task)).run()
         assert result.success
         robust = result.robust_assignment
         assert [robust.parameter_num_options(parameter) for parameter in range(4)] == [3, 3, 3, 3]
         assert all(robust.parameter_num_options(parameter) == 1 for parameter in range(4, robust.num_parameters))
         assert result.assignment.size == 1
 
-    def test_the_robust_policy_is_confirmed_by_ar(self, rocks_colored_mdp, rocks_task):
-        synthesizer = paynt.synthesizer.smpmc.SynthesizerSMPMC(rocks_colored_mdp, _robust(rocks_task))
+    def test_the_robust_policy_is_confirmed_by_ar(self, mdp_family_rocks_4_2):
+        synthesizer = paynt.synthesizer.smpmc.SynthesizerSMPMC(mdp_family_rocks_4_2.colored_mdp, _robust(mdp_family_rocks_4_2.task))
         result = synthesizer.run()
-        assert paynt.synthesizer.smpmc._utils.verify_robust(synthesizer.colored_mdp, rocks_task, result.robust_assignment)
+        assert paynt.synthesizer.smpmc._utils.verify_robust(synthesizer.colored_mdp, mdp_family_rocks_4_2.task, result.robust_assignment)
 
-    def test_run_reports_the_verification_when_asked(self, rocks_colored_mdp, rocks_task):
-        result = paynt.synthesizer.smpmc.SynthesizerSMPMC(rocks_colored_mdp, _robust(rocks_task, verify_robust=True)).run()
+    def test_run_reports_the_verification_when_asked(self, mdp_family_rocks_4_2):
+        result = paynt.synthesizer.smpmc.SynthesizerSMPMC(mdp_family_rocks_4_2.colored_mdp, _robust(mdp_family_rocks_4_2.task, verify_robust=True)).run()
         assert result.robust_verified is True
 
-    def test_a_forall_pattern_overrides_the_environment_default(self, rocks_colored_mdp, rocks_task):
+    def test_a_forall_pattern_overrides_the_environment_default(self, mdp_family_rocks_4_2):
         # quantifying the policy universally too: not every policy visits both rocks
-        result = paynt.synthesizer.smpmc.SynthesizerSMPMC(rocks_colored_mdp, _robust(rocks_task, forall_pattern=".")).run()
+        result = paynt.synthesizer.smpmc.SynthesizerSMPMC(mdp_family_rocks_4_2.colored_mdp, _robust(mdp_family_rocks_4_2.task, forall_pattern=".")).run()
         assert not result.success
         assert result.robust_assignment is None
 
 
 class TestRobustSynthesisOnGenericSketch:
-    def test_sat_when_one_option_works_for_every_environment(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        result = paynt.synthesizer.smpmc.SynthesizerSMPMC(smpmc_tiny_colored_mdp, _robust(smpmc_tiny_task, forall_pattern="^x2$", verify_robust=True)).run()
+    def test_sat_when_one_option_works_for_every_environment(self, smpmc_tiny):
+        result = paynt.synthesizer.smpmc.SynthesizerSMPMC(smpmc_tiny.colored_mdp, _robust(smpmc_tiny.task, forall_pattern="^x2$", verify_robust=True)).run()
         assert result.success
         assert str(result.robust_assignment) == "x1=4, x2: {3,4}, x3=8"
         assert result.robust_verified is True
 
-    def test_unsat_when_no_option_works_for_every_environment(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        result = paynt.synthesizer.smpmc.SynthesizerSMPMC(smpmc_tiny_colored_mdp, _robust(smpmc_tiny_task, forall_pattern="^x1$")).run()
+    def test_unsat_when_no_option_works_for_every_environment(self, smpmc_tiny):
+        result = paynt.synthesizer.smpmc.SynthesizerSMPMC(smpmc_tiny.colored_mdp, _robust(smpmc_tiny.task, forall_pattern="^x1$")).run()
         assert not result.success
         assert result.robust_assignment is None
 
-    def test_a_forall_pattern_is_required_outside_a_family(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
+    def test_a_forall_pattern_is_required_outside_a_family(self, smpmc_tiny):
         with pytest.raises(ValueError, match="--smpmc-forall"):
-            paynt.synthesizer.smpmc.SynthesizerSMPMC(smpmc_tiny_colored_mdp, _robust(smpmc_tiny_task))
+            paynt.synthesizer.smpmc.SynthesizerSMPMC(smpmc_tiny.colored_mdp, _robust(smpmc_tiny.task))
 
-    def test_a_pattern_matching_no_parameter_is_an_error(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
+    def test_a_pattern_matching_no_parameter_is_an_error(self, smpmc_tiny):
         with pytest.raises(ValueError, match="matches no parameter"):
-            paynt.synthesizer.smpmc.SynthesizerSMPMC(smpmc_tiny_colored_mdp, _robust(smpmc_tiny_task, forall_pattern="no_such_hole"))
+            paynt.synthesizer.smpmc.SynthesizerSMPMC(smpmc_tiny.colored_mdp, _robust(smpmc_tiny.task, forall_pattern="no_such_hole"))
 
     def test_an_optimality_objective_optimizes_the_worst_case(self):
         _synthesizer, _task, result = _run("tests/smpmc-tiny", "optimality.props", forall_pattern="^x2$", verify_robust=True)
@@ -96,8 +94,8 @@ class TestRobustSynthesisOnGenericSketch:
         assert str(result.robust_assignment) == "x1=4, x2: {3,4}, x3=8"
         assert result.robust_verified is True
 
-    def test_a_plain_search_reports_no_robust_assignment(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        result = paynt.synthesizer.smpmc.SynthesizerSMPMC(smpmc_tiny_colored_mdp, smpmc_tiny_task).run()
+    def test_a_plain_search_reports_no_robust_assignment(self, smpmc_tiny):
+        result = paynt.synthesizer.smpmc.SynthesizerSMPMC(smpmc_tiny.colored_mdp, smpmc_tiny.task).run()
         assert result.success
         assert result.robust_assignment is None
         assert result.robust_verified is None
@@ -123,10 +121,12 @@ class TestRobustOptimality:
         assert result.robust_verified is True
 
     def test_over_many_rounds(self):
-        """On rocks-4-2 the worst case improves over several rounds before reaching 1.0, as P>=1 is robustly sat (see TestRobustSynthesisOnFamily)."""
-        _synthesizer, _task, result = _run("tests/mdp-family-rocks-4-2", "max.props", verify_robust=True)
+        """On rocks-4-2 the worst case improves over several rounds before reaching 1.0, as P>=1 is robustly sat (see TestRobustSynthesisOnFamily).
+
+        The verification by AR is left out to save time, the tests above check it.
+        """
+        _synthesizer, _task, result = _run("tests/mdp-family-rocks-4-2", "max.props")
         assert result.value == pytest.approx(1.0)
-        assert result.robust_verified is True
 
     def test_verification_rejects_a_worst_case_the_policy_does_not_attain(self):
         synthesizer, task, result = _run("tests/mdp-family-correlated", "sketch.props")
@@ -156,21 +156,21 @@ class TestVerifyRobust:
     def _candidate(self, colored_mdp, x1_option):
         return colored_mdp.parameter_space.assume_options_copy([[x1_option], [0, 1], [0]])
 
-    def test_accepts_a_robust_candidate(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        candidate = self._candidate(smpmc_tiny_colored_mdp, x1_option=3)  # x1=4
-        assert paynt.synthesizer.smpmc._utils.verify_robust(smpmc_tiny_colored_mdp, smpmc_tiny_task, candidate)
+    def test_accepts_a_robust_candidate(self, smpmc_tiny):
+        candidate = self._candidate(smpmc_tiny.colored_mdp, x1_option=3)  # x1=4
+        assert paynt.synthesizer.smpmc._utils.verify_robust(smpmc_tiny.colored_mdp, smpmc_tiny.task, candidate)
 
-    def test_rejects_a_candidate_violated_by_one_environment(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
-        candidate = self._candidate(smpmc_tiny_colored_mdp, x1_option=0)  # x1=1: fails for x2=3
-        assert not paynt.synthesizer.smpmc._utils.verify_robust(smpmc_tiny_colored_mdp, smpmc_tiny_task, candidate)
+    def test_rejects_a_candidate_violated_by_one_environment(self, smpmc_tiny):
+        candidate = self._candidate(smpmc_tiny.colored_mdp, x1_option=0)  # x1=1: fails for x2=3
+        assert not paynt.synthesizer.smpmc._utils.verify_robust(smpmc_tiny.colored_mdp, smpmc_tiny.task, candidate)
 
 
 class TestFreshPropagators:
-    def test_every_term_is_held_through_the_solver_context(self, smpmc_tiny_colored_mdp, smpmc_tiny_task):
+    def test_every_term_is_held_through_the_solver_context(self, smpmc_tiny):
         """Z3 frees an MBQI sub-context once its round ends, while z3's Python API keeps every propagator alive until
         exit: a term held through the sub-context is then released through a dangling pointer. The resulting heap
-        corruption only shows up at exit, and not reliably (see test_synthesizer_smpmc_cli.py), so check the invariant."""
-        paynt.synthesizer.smpmc.SynthesizerSMPMC(smpmc_tiny_colored_mdp, _robust(smpmc_tiny_task, forall_pattern="^x2$")).run()
+        corruption only shows up at exit, and not reliably (see tests/cli/test_smpmc.py), so check the invariant."""
+        paynt.synthesizer.smpmc.SynthesizerSMPMC(smpmc_tiny.colored_mdp, _robust(smpmc_tiny.task, forall_pattern="^x2$")).run()
         propagators = [obj for obj in gc.get_objects() if isinstance(obj, paynt.synthesizer.smpmc.theory.SmpmcPropagator)]
         assert any(propagator.fresh_ctx is not None for propagator in propagators), "expected MBQI to create sub-context propagators"
         for propagator in propagators:

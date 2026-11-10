@@ -17,10 +17,9 @@ class TestBitvecWidth:
         parameter_space = _parameter_space(2, 4, 3)
         assert paynt.parameter_space.bitvec.bitvec_width(parameter_space) == 4
 
-    def test_single_option_parameter_still_gets_a_usable_width(self):
-        parameter_space = _parameter_space(1)
-        width = paynt.parameter_space.bitvec.bitvec_width(parameter_space)
-        assert width >= 1
+    def test_a_single_option_takes_two_bits(self):
+        # one bit for the option count 1, and the spare bit
+        assert paynt.parameter_space.bitvec.bitvec_width(_parameter_space(1)) == 2
 
     def test_no_parameters_does_not_crash(self):
         parameter_space = _parameter_space()

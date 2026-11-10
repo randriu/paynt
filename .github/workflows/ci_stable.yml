@@ -67,6 +67,9 @@ jobs:
           fi
       - name: Run PAYNT tests
         run: docker exec ci bash -c "cd /opt/paynt; pytest tests"
+      - name: Run random sketches
+        # 500 new sketches every run, see tests/README.md
+        run: docker exec -e PAYNT_RANDOM_SKETCHES=500 -e PAYNT_RANDOM_FIRST_SEED=$(( ${{ github.run_number }} * 1000 )) ci bash -c "cd /opt/paynt; pytest tests/soundness/test_random_sketches.py -n auto"
       - name: Run Payntbind tests
         run: docker exec ci bash -c "cd /opt/paynt/payntbind; pytest tests"
 

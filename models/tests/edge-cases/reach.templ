@@ -1,0 +1,19 @@
+// "start" holds in the initial state: every design reaches it with probability 1 and no cost. "nowhere" holds nowhere: every design reaches it with probability
+// 0, and its expected cost is infinite.
+dtmc
+
+hole int H in {0,1};
+
+module m
+    s : [0..2] init 0;
+    [step] s=0 & H=0 -> (s'=1);
+    [step] s=0 & H=1 -> 0.5 : (s'=1) + 0.5 : (s'=2);
+    [] s>0 -> true;
+endmodule
+
+label "start" = s=0;
+label "nowhere" = false;
+
+rewards "steps"
+    [step] true : 1;
+endrewards

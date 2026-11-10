@@ -1,0 +1,13 @@
+// With H=1 no command is enabled in state 1, which is reachable: the design has a deadlock. With H=0 the goal is reached with probability 1.
+dtmc
+
+hole int H in {0,1};
+
+module m
+    s : [0..2] init 0;
+    [] s=0 -> (s'=1);
+    [] s=1 & H=0 -> (s'=2);
+    [] s=2 -> true;
+endmodule
+
+label "goal" = s=2;

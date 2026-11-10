@@ -1,0 +1,2 @@
+R{"time"}<=3 [F "arrived"]
+R{"energy"}<=4 [F "arrived"]

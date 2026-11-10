@@ -21,6 +21,7 @@ import paynt.synthesizer.smpmc.result
 import paynt.synthesizer.smpmc.theory
 import paynt.synthesizer.synthesizer
 import paynt.task
+import paynt.utils.error_handling
 
 import logging
 
@@ -37,10 +38,7 @@ class SynthesizerSMPMC(paynt.synthesizer.synthesizer.Synthesizer):
     def __init__(self, colored_mdp: paynt.colored_mdp.ColoredMdp, task: paynt.task.SynthesisTask):
         super().__init__(colored_mdp, task)
         spec = task.specification
-        assert spec.num_properties == 1, (
-            "SMPMC currently supports a single property: either one plain threshold constraint or one "
-            "optimality objective, not both together and not several constraints at once"
-        )
+        paynt.utils.error_handling.require_single_property(spec)
         self.prop: paynt.specification.property.Property = spec.optimality if spec.optimality is not None else spec.constraints[0]
         # SMPMC always needs a constraint, as it supplies the viable(...) clause that the theory integration depends on, so it defaults to "exists"
         self.constraint = paynt.parameter_space.constraints.build_constraint(task.constraint_name or "exists")
