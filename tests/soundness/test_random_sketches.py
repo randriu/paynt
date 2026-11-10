@@ -1,9 +1,9 @@
 """Every engine against the reference on small random sketches: a DTMC of a few states, where a hole decides which distribution some states take.
 
 A threshold lies between two values of the designs, at least MARGIN away from all of them, so that the verdict does not depend on the precision. No
-specification maximizes a reward or has an objective together with a constraint, which hit known bugs (see test_engines.py). Two constraints still hit the bug
-of models/tests/constraint-decided-by-one-design now and then, though not in the default 25 sketches. PAYNT_RANDOM_SKETCHES sets the number of sketches,
-PAYNT_RANDOM_FIRST_SEED the seed of the first one.
+specification maximizes a reward or has an objective together with a constraint, which hit known bugs (see test_engines.py). Two constraints, and costs some
+design never finishes paying, still hit known bugs of AR in about 2 of 1000 sketches, though not in the default 25. PAYNT_RANDOM_SKETCHES sets the number of
+sketches, PAYNT_RANDOM_FIRST_SEED the seed of the first one.
 """
 
 from __future__ import annotations
