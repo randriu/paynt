@@ -1,6 +1,9 @@
+import os
+import shutil
 from fractions import Fraction
 
 import pytest
+import stormpy
 
 import paynt.colored_mdp
 import paynt.dt
@@ -10,6 +13,8 @@ import paynt.parser.sketch as sketch
 import paynt.pomdp
 import paynt.pomdp.decpomdp
 import paynt.pomdp.posmg
+
+from paynt.examples import paynt_models_dir
 
 from tests.helpers.models import get_sketch_paths
 
@@ -103,3 +108,31 @@ def test_an_observables_block_makes_the_observations(tmp_path):
 def test_a_missing_sketch_is_reported(tmp_path):
     with pytest.raises(ValueError, match="does not exist"):
         sketch.Sketch.load_sketch(str(tmp_path / "missing.templ"), str(tmp_path / "missing.props"))
+
+
+def test_parsing_writes_nothing_next_to_the_sketch(tmp_path, monkeypatch):
+    """Another run may read the same folder at the same time, and the folder may be read-only."""
+    folder = tmp_path / "smpmc-tiny"
+    shutil.copytree(os.path.join(paynt_models_dir, "tests/smpmc-tiny"), folder)
+    before = sorted(os.listdir(folder))
+    seen = []
+    parse = stormpy.parse_prism_program
+
+    def parse_and_look(path, *args, **kwargs):
+        seen.append(sorted(os.listdir(folder)))
+        return parse(path, *args, **kwargs)
+
+    monkeypatch.setattr(stormpy, "parse_prism_program", parse_and_look)
+    sketch.Sketch.load_sketch(str(folder / "sketch.templ"), str(folder / "sketch.props"))
+    assert seen and all(listing == before for listing in seen)
+
+
+def test_a_umb_archive_loads_as_the_model_in_it(tmp_path):
+    options = stormpy.BuilderOptions()
+    options.set_build_choice_labels(True)
+    options.set_build_state_valuations(True)
+    model = stormpy.build_model(stormpy.parse_prism_program(get_sketch_paths("tests/dt-maze")[0]), options=options)
+    stormpy.io.export_to_umb(model, str(tmp_path / "model.umb"))
+    (tmp_path / "sketch.props").write_text('Pmax=? [F "goal"]\n')
+    factory, _task = sketch.Sketch.load_sketch(str(tmp_path / "model.umb"), str(tmp_path / "sketch.props"))
+    assert factory.build().underlying_mdp.nr_states == model.nr_states

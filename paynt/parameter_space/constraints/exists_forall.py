@@ -26,5 +26,5 @@ class ExistsForallConstraint(Constraint):
         clauses = [in_range, z3.ForAll(forall_variables, z3.Implies(in_range, viable(*ctx.variables)))]
         # MBQI only instantiates quantifiers with values occurring in ground terms of the formula, so put every value the variables can take in scope
         for value in range(2**ctx.width):
-            clauses.append(z3.BitVec(f"__forall_value_{value}", ctx.width) == ctx.value(value))
+            clauses.append(z3.BitVec(f"__forall_value_{value}", ctx.width, ctx=ctx.z3_context) == ctx.value(value))
         return clauses

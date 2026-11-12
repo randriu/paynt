@@ -19,10 +19,6 @@ from paynt.examples import paynt_models_dir
 
 from tests.helpers.models import load_colored_mdp, load_sketch
 
-# the PRISM parser writes the sketch it parses next to the original, as sketch.templ<uuid>, and removes it right after: in a parallel run, another test may be
-# parsing the same project while it is copied
-PARSER_TEMPORARY = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
-
 
 @pytest.fixture
 def run_paynt(monkeypatch, tmp_path):
@@ -32,9 +28,7 @@ def run_paynt(monkeypatch, tmp_path):
 
     def run(project, *args):
         folder = tmp_path / os.path.basename(project)
-        shutil.copytree(
-            os.path.join(paynt_models_dir, project), folder, ignore=lambda _directory, names: [name for name in names if PARSER_TEMPORARY.search(name)]
-        )
+        shutil.copytree(os.path.join(paynt_models_dir, project), folder)
         result = CliRunner().invoke(paynt.cli.paynt_run, [str(folder), *args])
         assert result.exit_code == 0, repr(result.exception)
         return folder, result.output

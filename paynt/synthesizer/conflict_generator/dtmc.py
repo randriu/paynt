@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import operator
 from typing import Any
 
 import paynt.colored_mdp
 import paynt.task
+import paynt.specification.property
 import paynt.synthesizer.search_node
 
 import payntbind
@@ -48,13 +50,17 @@ class ConflictGeneratorDtmc:
             index, prop, parameter_space_result = request
 
             threshold = prop.threshold
+            # a value equal to the threshold violates P>0.2, and an objective must improve on the optimum
+            strict = prop.op in (operator.lt, operator.gt)
 
             bounds = None
             if parameter_space_result is not None:
                 bounds = parameter_space_result.primary.result
 
             assert node.mdp is not None
-            conflict = self.counterexample_generator.construct_conflict(index, threshold, bounds, node.mdp.underlying_mdp_state_map)
+            conflict = self.counterexample_generator.construct_conflict(
+                index, threshold, strict, bounds, node.mdp.underlying_mdp_state_map, env=paynt.specification.property.Property.environment
+            )
             conflicts.append(conflict)
 
         return conflicts

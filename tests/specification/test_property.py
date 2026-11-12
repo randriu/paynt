@@ -59,16 +59,11 @@ class TestSpecificationRewrap:
 
 
 class TestThreshold:
-    @pytest.mark.parametrize("threshold", ["0.25", "0.3"])
+    # Storm alone makes 0.2 the double 0.19999999999999998, so a design whose probability is 0.2 would violate P<=0.2
+    @pytest.mark.parametrize("threshold", ["0.25", "0.3", "0.2", "0.1", "-0.1", "1e-3"])
     def test_is_the_double_nearest_to_the_written_number(self, threshold):
         prop = paynt.specification.property.Property(stormpy.parse_properties(f'P<={threshold} [F "goal"]')[0])
         assert prop.threshold == float(threshold)
-
-    @pytest.mark.xfail(strict=True, reason="Storm rounds the rational 1/5 toward zero when it makes it a double: 0.19999999999999998")
-    def test_is_the_double_nearest_to_a_number_that_rounds_up(self):
-        """A design whose probability is 0.2 then violates `P<=0.2` and satisfies `P>0.2`."""
-        prop = paynt.specification.property.Property(stormpy.parse_properties('P<=0.2 [F "goal"]')[0])
-        assert prop.threshold == 0.2
 
 
 WALK = """dtmc

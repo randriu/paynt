@@ -7,8 +7,6 @@ import paynt.task
 import paynt.synthesizer.search_node
 import paynt.synthesizer.synthesizer
 import paynt.synthesizer.conflict_generator.auto
-import paynt.synthesizer.conflict_generator.dtmc
-import paynt.synthesizer.conflict_generator.mdp
 import paynt.parameter_space.parameter_space
 import paynt.parameter_space.smt
 import paynt.parameter_space.constraints
@@ -23,24 +21,13 @@ class SynthesizerCEGIS(paynt.synthesizer.synthesizer.Synthesizer):
     def __init__(self, colored_mdp: paynt.colored_mdp.ColoredMdp, task: paynt.task.SynthesisTask):
         super().__init__(colored_mdp, task)
 
-        self.conflict_generator = self.choose_conflict_generator(colored_mdp, task)
+        # the DTMC conflict generator, or the MDP one for an assignment whose model still has nondeterminism
+        self.conflict_generator = paynt.synthesizer.conflict_generator.auto.ConflictGeneratorAuto(colored_mdp, task)
 
         paynt.utils.error_handling.require_no_maximizing_reward(self.task.specification)
 
         # no constraint unless one is requested via --constraint
         self.constraint = paynt.parameter_space.constraints.build_constraint(task.constraint_name) if task.constraint_name else None
-
-    def choose_conflict_generator(
-        self, colored_mdp: paynt.colored_mdp.ColoredMdp, task: paynt.task.SynthesisTask
-    ) -> paynt.synthesizer.conflict_generator.dtmc.ConflictGeneratorDtmc:
-        if task.conflict_generator_type == "mdp":
-            conflict_generator: paynt.synthesizer.conflict_generator.dtmc.ConflictGeneratorDtmc = paynt.synthesizer.conflict_generator.mdp.ConflictGeneratorMdp(
-                colored_mdp, task
-            )
-        else:
-            # default conflict generator: the DTMC one, unless the model of an assignment still has nondeterminism
-            conflict_generator = paynt.synthesizer.conflict_generator.auto.ConflictGeneratorAuto(colored_mdp, task)
-        return conflict_generator
 
     @property
     def method_name(self) -> str:

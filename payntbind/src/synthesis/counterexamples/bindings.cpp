@@ -17,7 +17,7 @@ void bindings_counterexamples(py::module& m) {
         .def("prepare_dtmc", &synthesis::CounterexampleGenerator<>::prepareDtmc, py::arg("dtmc"), py::arg("quotient_state_map"))
         .def(
             "construct_conflict", &synthesis::CounterexampleGenerator<>::constructConflict,
-            py::arg("formula_index"), py::arg("formula_bound"), py::arg("mdp_bounds"), py::arg("mdp_quotient_state_map")
+            py::arg("formula_index"), py::arg("formula_bound"), py::arg("strict"), py::arg("mdp_bounds"), py::arg("mdp_quotient_state_map"), py::arg("env")
         )
         .def("print_profiling", &synthesis::CounterexampleGenerator<>::printProfiling)
         ;
@@ -34,6 +34,9 @@ void bindings_counterexamples(py::module& m) {
             py::arg("quotient_mdp"), py::arg("hole_count"), py::arg("mdp_holes"), py::arg("formulae")
         )
         .def("prepare_mdp", &synthesis::CounterexampleGeneratorMdp<>::prepareMdp)
-        .def("construct_conflict", &synthesis::CounterexampleGeneratorMdp<>::constructConflict)
+        .def(
+            "construct_conflict", &synthesis::CounterexampleGeneratorMdp<>::constructConflict,
+            py::arg("formula_index"), py::arg("formula_bound"), py::arg("strict"), py::arg("mdp_bounds"), py::arg("mdp_quotient_state_map"), py::arg("env")
+        )
         ;
 }

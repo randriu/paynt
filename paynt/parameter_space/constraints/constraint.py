@@ -32,8 +32,13 @@ class ConstraintContext:
     # parameters universally quantified by a robust (exists-forall) constraint; empty for plain existential search
     forall_parameters: list[int] = field(default_factory=list)
 
+    @property
+    def z3_context(self) -> Any:
+        """The Z3 context of the variables: a constraint makes its own terms there."""
+        return self.variables[0].ctx if self.variables else z3.main_ctx()
+
     def value(self, option: int) -> Any:
-        return z3.BitVecVal(option, self.width)
+        return z3.BitVecVal(option, self.width, ctx=self.z3_context)
 
     def eq(self, parameter: int, option: int) -> Any:
         return self.variables[parameter] == self.value(option)

@@ -368,10 +368,12 @@ template <typename ValueType, typename StateType>
 std::pair<bool,bool> CounterexampleGeneratorMdp<ValueType,StateType>::expandAndCheck (
     uint64_t formula_index,
     ValueType formula_bound,
+    bool strict,
     // std::vector<std::vector<std::pair<StateType,ValueType>>> & matrix_submdp,
     std::vector<std::vector<StormRow>> & matrix_submdp,
     storm::models::sparse::StateLabeling const& labeling_submdp,
-    std::unordered_map<std::string,storm::models::sparse::StandardRewardModel<ValueType>> & reward_models_submdp
+    std::unordered_map<std::string,storm::models::sparse::StandardRewardModel<ValueType>> & reward_models_submdp,
+    storm::Environment const& env
 ) {
     // result.first - wave exploration finish status
     // result.second - formula satisfied
@@ -454,12 +456,6 @@ std::pair<bool,bool> CounterexampleGeneratorMdp<ValueType,StateType>::expandAndC
         hint.setResultHint(boost::make_optional(this->hint_result->template asExplicitQuantitativeCheckResult<ValueType>().getValueVector()));
         task.setHint(std::make_shared<storm::modelchecker::ExplicitModelCheckerHint<ValueType>>(hint));
     }
-    storm::Environment env;
-    // storm::SolverEnvironment & solver = env.solver();
-    // std::cout << solver.getLinearEquationSolverType() << std::endl;
-    // std::cout << solver.getPrecisionOfLinearEquationSolver() << std::endl;
-
-
     // Model check
     // std::unique_ptr<storm::modelchecker::CheckResult> result_ptr = storm::api::verifyWithSparseEngine<ValueType>(submdp, task);
     // storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType>& result = result_ptr->asExplicitQuantitativeCheckResult<ValueType>();
@@ -468,32 +464,13 @@ std::pair<bool,bool> CounterexampleGeneratorMdp<ValueType,StateType>::expandAndC
     this->timer_model_check.stop();
     storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType>& model_check_result = this->hint_result->template asExplicitQuantitativeCheckResult<ValueType>();
 
-    // formula_modified[formula_index] is constructed (see the constructor) from whatever formula Python
-    // passed in -- today, always a bound-free quantitative formula (Specification.stormpy_formulae()),
-    // since a bound-carrying variant of this formula is what's being *searched for*, not something known up
-    // front. getComparisonType() asserts a bound is present (storm::logic::OperatorFormula::
-    // getComparisonType(), only checked -- and only aborts -- in a debug-mode storm build), so it must not
-    // be called at all when there is none; the strict-vs-non-strict distinction below then simply defaults
-    // to non-strict, matching this method's behavior before bound-carrying formulas were ever considered.
-    auto const& operator_formula = this->formula_modified[formula_index]->asOperatorFormula();
-    bool use_strict_less = operator_formula.hasBound() && operator_formula.getComparisonType() == storm::logic::ComparisonType::Less;
-    bool use_strict_greater = operator_formula.hasBound() && operator_formula.getComparisonType() == storm::logic::ComparisonType::Greater;
-
-    bool satisfied;
+    // the formulae have no bound, so the comparison comes from the caller
+    ValueType value = model_check_result[initial_state];
     if(this->formula_safety[formula_index]) {
-        if (use_strict_less) {
-            satisfied = model_check_result[initial_state] < formula_bound;
-        } else {
-            satisfied = model_check_result[initial_state] <= formula_bound;
-        }
+        result.second = strict ? value < formula_bound : value <= formula_bound;
     } else {
-        if (use_strict_greater) {
-            satisfied = model_check_result[initial_state] > formula_bound;
-        } else {
-            satisfied = model_check_result[initial_state] >= formula_bound;
-        }
+        result.second = strict ? value > formula_bound : value >= formula_bound;
     }
-    result.second = satisfied;
 
     return result;
 }
@@ -504,9 +481,11 @@ template <typename ValueType, typename StateType>
 std::vector<uint64_t> CounterexampleGeneratorMdp<ValueType,StateType>::constructConflict (
     uint64_t formula_index,
     ValueType formula_bound,
+    bool strict,
     // TODO: revise rest of the args
     std::shared_ptr<storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType> const> mdp_bounds, // placeholders for Hybrid
-    std::vector<StateType> const& mdp_quotient_state_map // maybe not needed as we don't need to quotient MDP
+    std::vector<StateType> const& mdp_quotient_state_map, // maybe not needed as we don't need to quotient MDP
+    storm::Environment const& env
 ) {
     this->timer_conflict.start();
     StateType mdp_states = this->mdp->getNumberOfStates();
@@ -519,23 +498,30 @@ std::vector<uint64_t> CounterexampleGeneratorMdp<ValueType,StateType>::construct
         formula_index, mdp_bounds, mdp_quotient_state_map, matrix_submdp, labeling_submdp, reward_models_submdp
     );
 
+    bool violated = false;
     while(true) {
         std::pair<bool,bool> result = this->expandAndCheck(
-            formula_index, formula_bound, matrix_submdp, labeling_submdp, reward_models_submdp
+            formula_index, formula_bound, strict, matrix_submdp, labeling_submdp, reward_models_submdp, env
         );
         bool last_wave = result.first;
         bool satisfied = result.second;
 
-        if(!satisfied || last_wave) {
+        if(!satisfied) {
+            violated = true;
+            break;
+        }
+        if(last_wave) {
             break;
         }
     }
 
     // Return a set of critical holes
+    // exploreWave registers the holes of the next wave before the current one is expanded, so a violated check has not seen the current wave's holes
+    uint64_t conflict_wave = violated ? current_wave - 1 : current_wave;
     std::vector<uint64_t> critical_holes;
     for(uint64_t hole = 0; hole < this->hole_count; hole++) {
         uint64_t wave_registered = this->hole_wave[hole];
-        if(wave_registered > 0 && wave_registered <= current_wave) {
+        if(wave_registered > 0 && wave_registered <= conflict_wave) {
             critical_holes.push_back(hole);
         }
     }

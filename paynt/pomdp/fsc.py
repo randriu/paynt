@@ -89,19 +89,33 @@ class FscFactored:
 
     @classmethod
     def from_json(cls, json_dict: dict[str, Any]) -> FscFactored:
-        num_nodes = json_dict["num_nodes"]
-        num_observations = json_dict["num_observations"]
-        fsc = FscFactored(num_nodes, num_observations)
-        fsc.action_function = json_dict["action_function"]
-        fsc.update_function = json_dict["update_function"]
+        """The FSC of to_json: a stochastic one has distributions (dicts) in its cells, whose keys JSON made strings."""
+        cells = [cell for function in ("action_function", "update_function") for row in json_dict[function] for cell in row]
+        is_deterministic = not any(isinstance(cell, dict) for cell in cells)
+        fsc = FscFactored(json_dict["num_nodes"], json_dict["num_observations"], is_deterministic)
+        if is_deterministic:
+            fsc.action_function = json_dict["action_function"]
+            fsc.update_function = json_dict["update_function"]
+        else:
+            fsc.action_function = [[_distribution_from_json(cell) for cell in row] for row in json_dict["action_function"]]
+            fsc.update_function = [[_distribution_from_json(cell) for cell in row] for row in json_dict["update_function"]]
+        fsc.action_labels = json_dict.get("action_labels")
+        fsc.observation_labels = json_dict.get("observation_labels")
         return fsc
 
     def reorder_nodes(self, node_old_to_new: list[int]) -> None:
+        def renamed(update: Any) -> Any:
+            if update is None:
+                return None
+            if self.is_deterministic:
+                return node_old_to_new[update]
+            return {node_old_to_new[node]: probability for node, probability in update.items()}
+
         action_function: list[Any] = [None for node in range(self.num_nodes)]
         update_function: list[Any] = [None for node in range(self.num_nodes)]
         for node_old, node_new in enumerate(node_old_to_new):
             action_function[node_new] = self.action_function[node_old]
-            update_function[node_new] = [node_old_to_new[node] for node in self.update_function[node_old]]
+            update_function[node_new] = [renamed(update) for update in self.update_function[node_old]]
         self.action_function = action_function
         self.update_function = update_function
 
@@ -196,3 +210,7 @@ class FscFactored:
         fsc.observation_labels = self.observation_labels
         fsc.action_labels = self.action_labels
         return fsc
+
+
+def _distribution_from_json(cell: dict[str, float] | None) -> dict[int, float] | None:
+    return None if cell is None else {int(key): probability for key, probability in cell.items()}

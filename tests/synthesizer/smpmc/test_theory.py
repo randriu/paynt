@@ -7,6 +7,7 @@ import logging
 
 import pytest
 
+import paynt.parser.sketch
 import paynt.synthesizer.smpmc
 import paynt.synthesizer.smpmc.checker
 import paynt.synthesizer.statistic
@@ -131,6 +132,25 @@ class TestColoredMdpTheoryRelevantParameters:
         assert theory.relevant_parameters(eta, sub_mdp) <= whole
 
 
+NEVER_DONE = """dtmc
+
+hole int H in {0,1};
+
+module m
+    s : [0..2] init 0;
+    [] s=0 & H=0 -> (s'=1);
+    [] s=0 & H=1 -> 0.5 : (s'=1) + 0.5 : (s'=0);
+    [] s>=1 -> true;
+endmodule
+
+label "done" = s=2;
+
+rewards "cost"
+    s=0 : 1;
+endrewards
+"""
+
+
 class TestColoredMdpTheoryRewardConvergence:
     """_model_check escalates from value iteration to policy iteration when the capped value iteration has not converged.
 
@@ -178,6 +198,19 @@ class TestColoredMdpTheoryRewardConvergence:
 
         assert value_iterations == []
         assert second.value == first.value
+
+    def test_an_infinite_value_of_both_does_not_escalate(self, tmp_path):
+        """No design reaches done, so the least cost is infinite in value and in policy iteration alike."""
+        (tmp_path / "sketch.templ").write_text(NEVER_DONE)
+        (tmp_path / "sketch.props").write_text('R{"cost"}min=? [F "done"]\n')
+        factory, task = paynt.parser.sketch.Sketch.load_sketch(str(tmp_path / "sketch.templ"), str(tmp_path / "sketch.props"))
+        colored_mdp = factory.build()
+        theory = paynt.synthesizer.smpmc.checker.ColoredMdpTheory(colored_mdp, task.specification.optimality)
+        sub_mdp, _selected_choices = colored_mdp.build(colored_mdp.parameter_space)
+
+        assert theory._model_check(sub_mdp, alt=False).value == float("inf")
+        assert theory._reward_convergence_verified == {False: True}
+        assert theory._reward_use_policy_iteration == {}
 
     def test_probability_properties_are_unaffected(self, smpmc_tiny):
         """The escalation machinery only ever triggers for reward properties -- probability values are bounded in [0,1] and don't exhibit this failure mode, so

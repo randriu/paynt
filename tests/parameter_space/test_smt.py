@@ -53,6 +53,16 @@ class TestParameterSpaceEncodingPickAssignment:
         assignment = encoding.pick_assignment()
         assert assignment.parameter_options(0) == [1]
 
+    def test_a_solver_of_a_narrowed_space_picks_every_option_left(self):
+        narrowed = _parameter_space(3).assume_parameter_options_copy(0, [1, 2])
+        solver = paynt.parameter_space.smt.SmtSolver(narrowed)
+        encoding = paynt.parameter_space.smt.ParameterSpaceEncoding(solver, narrowed)
+        picked = []
+        while (assignment := encoding.pick_assignment()) is not None:
+            picked.append(assignment.parameter_options(0)[0])
+            solver.solver.add(z3.Not(solver.create_parameter_clause(0, picked[-1])))
+        assert sorted(picked) == [1, 2]
+
     def test_exhausts_to_none(self):
         parameter_space = _parameter_space(1)  # a single parameter, single option: exactly one assignment
         solver = paynt.parameter_space.smt.SmtSolver(parameter_space)

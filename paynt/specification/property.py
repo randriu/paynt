@@ -4,6 +4,7 @@ from typing import Any
 
 import stormpy
 import payntbind
+import fractions
 import math
 import operator
 
@@ -156,7 +157,8 @@ class Property:
             self.threshold = rf.threshold_expr.evaluate_as_rational()
             self.threshold_plus_precision = self.threshold
         else:
-            self.threshold = rf.threshold_expr.evaluate_as_double()
+            # Storm's evaluate_as_double rounds toward zero (0.2 becomes 0.19999999999999998), Python rounds a fraction to the nearest double
+            self.threshold = float(fractions.Fraction(str(rf.threshold_expr.evaluate_as_rational())))
             if self.minimizing:
                 self.threshold_plus_precision = self.threshold + Property.model_checking_precision
             else:

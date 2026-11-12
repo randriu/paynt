@@ -62,15 +62,7 @@ def repeated_runs():
     return runs
 
 
-@pytest.mark.parametrize(
-    "method",
-    [
-        "onebyone",
-        "ar",
-        pytest.param("cegis", marks=pytest.mark.xfail(strict=True, reason="the SMT solver is in Z3's global context, whose models change from call to call")),
-        "smpmc",
-    ],
-)
+@pytest.mark.parametrize("method", ["onebyone", "ar", "cegis", "smpmc"])
 def test_the_same_run_six_times_in_one_process_gives_the_same_answer(repeated_runs, method):
     assert len(repeated_runs[method]) == 6
     assert len(set(repeated_runs[method])) == 1

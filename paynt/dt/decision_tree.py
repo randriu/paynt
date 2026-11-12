@@ -24,7 +24,8 @@ class DtVariable:
                 value = 0
             domain_new.append(value)
         self.domain: list[int] = sorted(domain_new)
-        self.is_bool_var = self.domain == [0, 1]
+        # a boolean of the model, not an integer that takes only the values 0 and 1
+        self.is_bool_var = len(domain_new) > 0 and all(isinstance(value, bool) for value in domain)
 
     @property
     def domain_min(self) -> int:

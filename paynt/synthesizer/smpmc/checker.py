@@ -255,8 +255,8 @@ class ColoredMdpTheory:
         self._reward_convergence_verified[alt] = True
         pi_result = self._model_check_with_environment(sub_mdp, alt, self._pi_environment())
         vi_value, pi_value = vi_result.value, pi_result.value
-        relative_error = abs(vi_value - pi_value) / max(abs(pi_value), 1e-12)
-        if relative_error <= _REWARD_CONVERGENCE_RELATIVE_TOLERANCE:
+        # equal values agree, inf included, where the relative error would be nan
+        if vi_value == pi_value or abs(vi_value - pi_value) / max(abs(pi_value), 1e-12) <= _REWARD_CONVERGENCE_RELATIVE_TOLERANCE:
             return vi_result
 
         logger.warning(
