@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import paynt.colored_mdp
@@ -55,6 +56,25 @@ def scheduler_scores_combined(colored_mdp: paynt.colored_mdp.ColoredMdp, task: p
     return combined
 
 
+def set_design_apart(colored_mdp: paynt.colored_mdp.ColoredMdp, node: paynt.synthesizer.search_node.SearchNode, result: Any) -> tuple[int, list[list[int]]]:
+    """(the splitter, its suboptions) that separate the design of a consistent scheduler from the others on one parameter it uses.
+
+    The designs that agree with it on every parameter it uses behave like it, so each such split brings it closer to a node of its own.
+    """
+    assert node.mdp is not None
+    used = colored_mdp.scheduler_selection(node.mdp, result.primary.result.get_scheduler())
+    splitters = [parameter for parameter, options in enumerate(used) if options and node.parameter_space.parameter_num_options(parameter) > 1]
+    if not splitters:
+        # every design of the node agrees with it where it matters, though the model has not collapsed into one design yet
+        splitter = next(parameter for parameter in range(node.parameter_space.num_parameters) if node.parameter_space.parameter_num_options(parameter) > 1)
+        return splitter, node.parameter_space.suboptions_half(splitter)
+    splitter = splitters[0]
+    [option] = result.primary_selection[splitter]
+    others = [other for other in node.parameter_space.parameter_options(splitter) if other != option]
+    # DFS takes the last one first
+    return splitter, [others, [option]]
+
+
 def split_parameter_space(
     colored_mdp: paynt.colored_mdp.ColoredMdp, task: paynt.task.SynthesisTask, node: paynt.synthesizer.search_node.SearchNode
 ) -> list[paynt.synthesizer.search_node.SearchNode]:
@@ -69,23 +89,19 @@ def split_parameter_space(
     assert not mdp.is_deterministic
 
     assert node.analysis_result is not None
-    cr = node.analysis_result.constraints_result
-    assert cr is not None
+    results = node.analysis_result.undecided_results()
 
-    # (i) L(h): cross-constraint disagreement among undecided constraints whose OWN scheduler is already
-    # fully consistent (a genuine candidate delta_i) -- paper's stated priority
-    candidates = [cr.results[i].primary_selection for i in cr.undecided_constraints if all(len(options) <= 1 for options in cr.results[i].primary_selection)]
-    disagreements = paynt.utils.scoring.compute_incompatibility_levels(candidates)
+    # (i) L(h): disagreement among the undecided properties (the objective included) whose OWN scheduler is already fully consistent (a genuine candidate
+    # delta_i) -- paper's stated priority
+    candidates = [result for result in results if all(len(options) <= 1 for options in result.primary_selection)]
+    disagreements = paynt.utils.scoring.compute_incompatibility_levels([result.primary_selection for result in candidates])
 
     used_options: list[int]
     if disagreements:
         splitter = paynt.utils.scoring.parameters_with_max_incompatibility(disagreements)[0]
         used_options = disagreements[splitter]
-    else:
+    elif scores := scheduler_scores_combined(colored_mdp, task, mdp, results):
         # (ii) v(h) aggregated across every still-relevant property
-        results = node.analysis_result.undecided_results()
-        scores = scheduler_scores_combined(colored_mdp, task, mdp, results)
-        assert scores, "undecided node has neither cross-constraint disagreement nor any inconsistent property to split on"
         splitter = paynt.utils.scoring.parameters_with_max_score(scores)[0]
         # order-preserving union across contributing properties -- NOT sorted(set(...)): suboptions_enumerate
         # builds one singleton bucket per entry in the given order, so reordering would silently change DFS
@@ -97,6 +113,9 @@ def split_parameter_space(
                 for option in result.primary_selection[splitter]:
                     if option not in used_options:
                         used_options.append(option)
+    else:
+        # (iii) every scheduler left is one design, which does not settle the node (it violates a constraint, or its value is not valid): set it apart
+        return node.split(*set_design_apart(colored_mdp, node, candidates[0]))
 
     if len(used_options) > 1:
         core_suboptions, other_suboptions = node.parameter_space.suboptions_enumerate(splitter, used_options)
@@ -137,73 +156,108 @@ class SynthesizerAR(paynt.synthesizer.synthesizer.Synthesizer):
         else:
             model = mdp
 
-        # check constraints
-        admissible_assignment = None
         spec = self.task.specification
         if node.constraint_indices is None:
             node.constraint_indices = list(spec.all_constraint_indices())
+        # the best and the worst case over several designs bound each of them; a single design is checked like its own model, by the best case alone (see
+        # Mdp.check_specification)
+        several_designs = node.parameter_space.size > 1
+        # a design of the node that satisfies the whole specification, found among the designs the best cases come from, and its value of the objective
+        admissible_assignment: paynt.parameter_space.parameter_space.ParameterSpace | None = None
+        admissible_value: Any = None
+
         results: list[paynt.specification.property_result.MdpPropertyResult | None] = [None for _ in spec.constraints]
         for index in node.constraint_indices:
             constraint = spec.constraints[index]
             result = paynt.specification.property_result.MdpPropertyResult(constraint)
             results[index] = result
 
-            # check primary direction
+            # the best case: if it violates the constraint, every design does
             result.primary = model.model_check_property(constraint)
-            if result.primary.sat is False:
+            if not result.primary.sat and not (several_designs and constraint.best_case_is_unknown(result.primary.value)):
                 result.sat = False
                 break
+            if not several_designs:
+                result.sat = True
+                continue
 
-            # check if the primary scheduler is consistent
-            result.primary_selection, consistent = self.colored_mdp.scheduler_is_consistent(mdp, node, result.primary.result, self.task.specification)
+            # a design the best case comes from may satisfy the whole specification, which says nothing about the other designs
+            result.primary_selection, consistent = self.colored_mdp.scheduler_is_consistent(mdp, node, result.primary.result, spec)
             if consistent:
                 assignment = node.parameter_space.assume_options_copy(result.primary_selection)
-                dtmc = self.colored_mdp.build_assignment(assignment)
-                res = dtmc.check_specification(self.task.specification)
-                accepting, _ = res.accepting_dtmc(self.task.specification)
-                if accepting:
-                    result.sat = True
-                    admissible_assignment = assignment
+                accepting, value = self.colored_mdp.build_assignment(assignment).check_specification(spec).accepting_dtmc(spec)
+                better = admissible_assignment is None or (spec.optimality is not None and value is not None and spec.optimality.op(value, admissible_value))
+                if accepting and better:
+                    admissible_assignment, admissible_value = assignment, value
 
-            # primary direction is SAT: check secondary direction to see whether all SAT
+            # the worst case: if it satisfies the constraint, every design does
             result.secondary = model.model_check_property(constraint, alt=True)
             if mdp.is_deterministic and result.primary.value != result.secondary.value:
                 logger.warning("WARNING: model is deterministic but min<max")
-            if result.secondary.sat:
-                result.sat = True
-                continue
+            if not constraint.best_case_is_unknown(result.primary.value):
+                if result.secondary.sat:
+                    result.sat = True
+            elif result.secondary.value == math.inf:
+                # the least reward is infinite too: no design surely reaches the target
+                result.sat = False
+                break
+            # else some design may not surely reach the target, which no least reward satisfying the constraint rules out
 
         spec_result = paynt.specification.property_result.MdpSpecificationResult()
         spec_result.constraints_result = paynt.specification.property_result.ConstraintsResult(results)
 
-        # check optimality
         if spec.optimality is not None and spec_result.constraints_result.sat is not False:
-            opt = spec.optimality
-            result = paynt.specification.property_result.MdpOptimalityResult(opt)
+            spec_result.optimality_result = self.check_objective(node, model, several_designs)
 
-            # check primary direction
-            result.primary = model.model_check_property(opt)
-            if not result.primary.improves_optimum:
-                # OPT <= LB
-                result.can_improve = False
-            else:
-                # LB < OPT, check if LB is tight
-                result.primary_selection, consistent = self.colored_mdp.scheduler_is_consistent(mdp, node, result.primary.result, self.task.specification)
-                result.can_improve = True
-                if consistent:
-                    # LB < OPT and it's tight, double-check the constraints and the value on the DTMC
-                    result.can_improve = False
-                    assignment = node.parameter_space.assume_options_copy(result.primary_selection)
-                    dtmc = self.colored_mdp.build_assignment(assignment)
-                    res = dtmc.check_specification(self.task.specification)
-                    assert res.constraints_result is not None
-                    if res.constraints_result.sat and spec.optimality.improves_optimum(res.optimality_result.value):
-                        result.improving_assignment = assignment
-                        result.improving_value = res.optimality_result.value
-            spec_result.optimality_result = result
-
-        spec_result.evaluate(node.parameter_space, admissible_assignment)
+        spec_result.evaluate(node.parameter_space, admissible_assignment, admissible_value)
         node.analysis_result = spec_result
+
+    def check_objective(
+        self, node: paynt.synthesizer.search_node.SearchNode, model: paynt.model.model.Mdp, several_designs: bool
+    ) -> paynt.specification.property_result.MdpOptimalityResult:
+        mdp = node.mdp
+        assert mdp is not None
+        spec = self.task.specification
+        opt = spec.optimality
+        assert opt is not None
+        result = paynt.specification.property_result.MdpOptimalityResult(opt)
+
+        # the best case: no design does better
+        result.primary = model.model_check_property(opt)
+        if several_designs and opt.best_case_is_unknown(result.primary.value):
+            # some design may improve the optimum, unless the least reward is infinite too: then no design surely reaches the target
+            improves = model.model_check_property(opt, alt=True).value != math.inf
+        else:
+            improves = result.primary.improves_optimum
+        if not improves:
+            result.can_improve = False
+            return result
+
+        result.can_improve = True
+        if several_designs:
+            result.primary_selection, consistent = self.colored_mdp.scheduler_is_consistent(mdp, node, result.primary.result, spec)
+            if not consistent:
+                return result
+            assignment = node.parameter_space.assume_options_copy(result.primary_selection)
+        else:
+            assignment = node.parameter_space
+        # the design the best case comes from, the best design of the node
+        res = self.colored_mdp.build_assignment(assignment).check_specification(spec)
+        assert res.constraints_result is not None
+        value = res.optimality_result.value
+        if res.constraints_result.sat and opt.improves_optimum(value):
+            result.improving_assignment = assignment
+            result.improving_value = value
+            result.can_improve = False
+        elif several_designs and not opt.result_valid(value):
+            # it never surely reaches the target, the other designs may: the best case is infinite, or Storm's scheduler for a finite one is not the best (for
+            # a minimized reward it can pick a choice that leaves the target unreachable)
+            pass
+        elif not opt.improves_optimum(value) or not several_designs or mdp.is_deterministic:
+            # it does not improve the optimum, so no design does; or the designs all behave like it
+            result.can_improve = False
+        # else it improves the optimum but violates a constraint, which other designs may satisfy
+        return result
 
     def verify_parameter_space(self, node: paynt.synthesizer.search_node.SearchNode) -> None:
         parent_selected_choices = node.parent_info.selected_choices if node.parent_info is not None else None

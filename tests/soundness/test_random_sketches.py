@@ -1,9 +1,7 @@
 """Every engine against the reference on small random sketches: a DTMC of a few states, where a hole decides which distribution some states take.
 
-A threshold lies between two values of the designs, at least MARGIN away from all of them, so that the verdict does not depend on the precision. No
-specification maximizes a reward or has an objective together with a constraint, which hit known bugs (see test_engines.py). Two constraints, and costs some
-design never finishes paying, still hit known bugs of AR in about 2 of 1000 sketches, though not in the default 25. PAYNT_RANDOM_SKETCHES sets the number of
-sketches, PAYNT_RANDOM_FIRST_SEED the seed of the first one.
+A threshold lies between two values of the designs, at least MARGIN away from all of them, so that the verdict does not depend on the precision.
+PAYNT_RANDOM_SKETCHES sets the number of sketches, PAYNT_RANDOM_FIRST_SEED the seed of the first one.
 """
 
 from __future__ import annotations
@@ -65,15 +63,21 @@ def as_decimal(number):
 
 
 def random_specification(rng, sketch_path):
-    """Properties on the goal: one or two constraints, or one objective."""
+    """Properties on the goal: one or two constraints, an objective, or an objective with a constraint."""
     probabilities = [design.values[0] for design in Reference(sketch_path, ['P=? [F "goal"]']).designs]
     costs = [design.values[0] for design in Reference(sketch_path, ['R{"cost"}=? [F "goal"]']).designs]
     finite_costs = [cost for cost in costs if cost != float("inf")] or [Fraction(0)]
     probability = f'P{rng.choice([">=", ">", "<=", "<"])}{as_decimal(threshold(rng, probabilities))} [F "goal"]'
-    cost = f'R{{"cost"}}{rng.choice(["<=", "<"])}{as_decimal(threshold(rng, finite_costs))} [F "goal"]'
-    objectives = ['Pmax=? [F "goal"]', 'Pmin=? [F "goal"]', 'R{"cost"}min=? [F "goal"]']
-    kind = rng.choice(["probability", "cost", "both", "objective"])
-    return {"probability": [probability], "cost": [cost], "both": [probability, cost], "objective": [rng.choice(objectives)]}[kind]
+    cost = f'R{{"cost"}}{rng.choice([">=", ">", "<=", "<"])}{as_decimal(threshold(rng, finite_costs))} [F "goal"]'
+    objective = rng.choice(['Pmax=? [F "goal"]', 'Pmin=? [F "goal"]', 'R{"cost"}max=? [F "goal"]', 'R{"cost"}min=? [F "goal"]'])
+    kind = rng.choice(["probability", "cost", "both", "objective", "constrained objective"])
+    return {
+        "probability": [probability],
+        "cost": [cost],
+        "both": [probability, cost],
+        "objective": [objective],
+        "constrained objective": [rng.choice([probability, cost]), objective],
+    }[kind]
 
 
 @pytest.mark.parametrize("seed", range(FIRST_SEED, FIRST_SEED + SKETCHES))

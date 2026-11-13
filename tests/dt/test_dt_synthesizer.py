@@ -36,7 +36,6 @@ class TestTwoConstraints:
         leaves = sorted(tree.action_labels[leaf.action] for leaf in tree.collect_terminals())
         assert leaves in (["fast", "medium"], ["__random__", "fast"])
 
-    @pytest.mark.xfail(strict=True, raises=AssertionError, reason="AR drops the root: the tree best for the energy alone drives slowly, which takes 6 hours")
     def test_the_least_energy_of_a_trip_of_4_hours_is_4(self):
         """optimality.props: at most 4 hours, the least energy, at depth 0."""
         factory, task = load_sketch("tests/time-energy", sketch_name="tree.templ", props_name="optimality.props")

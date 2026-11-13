@@ -147,30 +147,39 @@ class SynthesizerARDt(paynt.synthesizer.synthesizer_ar.SynthesizerAR):
         mdp = node.mdp
         assert not mdp.is_deterministic
 
-        cr = node.analysis_result.constraints_result
-        assert cr is not None
+        results = node.analysis_result.undecided_results()
 
-        # (i) L(h): cross-constraint disagreement among undecided constraints whose OWN scheduler is already
-        # fully consistent -- same priority as the generic AR path (paper https://www.jair.org/index.php/jair/article/view/16593 Section 3.3)
-        candidates = [
-            cr.results[i].primary_selection for i in cr.undecided_constraints if all(len(options) <= 1 for options in cr.results[i].primary_selection)
-        ]
+        # (i) L(h): disagreement among the undecided properties (the objective included) whose OWN scheduler is already fully consistent -- same priority as
+        # the generic AR path (paper https://www.jair.org/index.php/jair/article/view/16593 Section 3.3)
+        candidates = [result.primary_selection for result in results if all(len(options) <= 1 for options in result.primary_selection)]
         disagreements = paynt.utils.scoring.compute_incompatibility_levels(candidates)
 
+        info = self.colored_mdp.feature_info
         if disagreements:
             splitter = paynt.utils.scoring.parameters_with_max_incompatibility(disagreements)[0]
             used_options = disagreements[splitter]
-        else:
+        elif (result := next((r for r in results if any(len(options) > 1 for options in r.primary_selection)), None)) is not None:
             # (ii) DT's own kind-based heuristic (scheduler_scores), applied to the first still-relevant
             # property that actually has a local inconsistency to split on
-            result = next((r for r in node.analysis_result.undecided_results() if any(len(options) > 1 for options in r.primary_selection)), None)
-            assert result is not None, "undecided DT node has neither cross-constraint disagreement nor any inconsistent property to split on"
             parameter_assignments = result.primary_selection
             scores = self.scheduler_scores(parameter_assignments)
             splitter = paynt.utils.scoring.parameters_with_max_score(scores)[0]
             used_options = parameter_assignments[splitter]
+        else:
+            # (iii) every scheduler left is one tree, which does not settle the node (it violates a constraint, or its value is not valid): set it apart on
+            # an action or a decision it uses, else halve a range
+            splittable = [parameter for parameter in range(node.parameter_space.num_parameters) if node.parameter_space.parameter_num_options(parameter) > 1]
+            used = [parameter for parameter in splittable if len(candidates[0][parameter]) == 1]
+            splitter = next((parameter for parameter in used if not info.is_variable_parameter[parameter]), None)
+            if splitter is not None:
+                [option] = candidates[0][splitter]
+                # DFS takes the last one first
+                suboptions = [[other for other in node.parameter_space.parameter_options(splitter) if other != option], [option]]
+            else:
+                splitter = (used or splittable)[0]
+                suboptions = node.parameter_space.suboptions_half(splitter)
+            return self.split_with_parent_info(node, splitter, suboptions)
 
-        info = self.colored_mdp.feature_info
         if info.is_action_parameter[splitter] or info.is_decision_parameter[splitter]:
             assert len(used_options) > 1
             core_suboptions, other_suboptions = node.parameter_space.suboptions_enumerate(splitter, used_options)
@@ -193,6 +202,14 @@ class SynthesizerARDt(paynt.synthesizer.synthesizer_ar.SynthesizerAR):
         else:
             suboptions = [other_suboptions] + core_suboptions  # DFS solves core first
 
+        return self.split_with_parent_info(node, splitter, suboptions, node.scheduler_choices)
+
+    def split_with_parent_info(self, node, splitter, suboptions, scheduler_choices=None):
+        """The child search nodes of a split.
+
+        :param scheduler_choices: the inconsistent scheduler of a single-property specification, whose result a child keeps while the scheduler stays
+            available in it (see verify_parameter_space); None to check every child anew
+        """
         # construct corresponding child search nodes (SearchNode.split snapshots node's ParentInfo-relevant
         # state and hands it, shared, to every freshly-split child); layer the DT-specific parent_info
         # fields on top -- these are now always real declared fields (ParentInfo.analysis_result/
@@ -201,8 +218,7 @@ class SynthesizerARDt(paynt.synthesizer.synthesizer_ar.SynthesizerAR):
         assert node.parameter_space.size == sum([child.parameter_space.size for child in child_nodes])
         for child in child_nodes:
             child.parent_info.analysis_result = node.analysis_result
-            # None (not just absent) for a multi-property specification -- see the guard in verify_parameter_space
-            child.parent_info.scheduler_choices = node.scheduler_choices
+            child.parent_info.scheduler_choices = scheduler_choices
         return child_nodes
 
     def counters_reset(self):

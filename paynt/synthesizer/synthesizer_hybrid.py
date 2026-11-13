@@ -117,6 +117,9 @@ class SynthesizerHybrid(paynt.synthesizer.synthesizer_ar.SynthesizerAR, paynt.sy
             # analyze the parameter space
             self.verify_parameter_space(node)
             self.update_optimum(node)
+            if self.best_assignment is not None and not self.task.specification.can_be_improved():
+                # an admissible design is all a specification without an objective asks for
+                return self.best_assignment
             assert node.analysis_result is not None
             if not node.analysis_result.can_improve:
                 self.explore(node.parameter_space)

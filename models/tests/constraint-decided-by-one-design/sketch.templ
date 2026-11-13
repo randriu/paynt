@@ -1,0 +1,23 @@
+// H=0 reaches the goal at a cost of 1, H=1 gets stuck, H=2 reaches it for free. sketch.props wants the goal reached with probability above 1/2 and a cost
+// below 1/2: only H=2 does both.
+//
+// On the MDP of all three designs, the cheapest scheduler is H=2 alone, which satisfies the whole specification but says nothing about H=0, which costs 1.
+// The scheduler Storm picks for reaching the goal is H=0 alone (H=2 is as good).
+dtmc
+
+hole int H in {0,1,2};
+
+module m
+    s : [0..2] init 0;    // 1: stuck, 2: goal
+    [go0] s=0 & H=0 -> (s'=2);
+    [go1] s=0 & H=1 -> (s'=1);
+    [go2] s=0 & H=2 -> (s'=2);
+    [] s>0 -> true;
+endmodule
+
+label "goal" = s=2;
+
+rewards "cost"
+    [go0] true : 1;
+    [go1] true : 2;
+endrewards

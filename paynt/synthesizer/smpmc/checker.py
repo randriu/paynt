@@ -151,7 +151,8 @@ class ColoredMdpTheory:
 
         result = self._model_check(sub_mdp, alt=(polarity is False))
 
-        if result.sat is polarity:
+        # an infinite best case over several designs says nothing about them (see Property.best_case_is_unknown)
+        if result.sat is polarity or (polarity and eta.size > 1 and self.prop.best_case_is_unknown(result.value)):
             self.cache.insert_inconclusive(fixed, polarity, self.epoch)
             return None
 

@@ -242,7 +242,16 @@ class Property:
         return new_property
 
     def result_valid(self, value: Any) -> bool:
+        """Whether the value of a single design is valid: an infinite reward means the design does not surely reach the target."""
         return not self.reward or value != math.inf
+
+    def best_case_is_unknown(self, value: Any) -> bool:
+        """Whether value, the best case of this property over several designs, says nothing about them.
+
+        The best case of a maximizing reward is a maximum, which is infinite as soon as one scheduler of the MDP fails to surely reach the target, even if
+        every design reaches it. A minimum is infinite only if every design is: that best case is a valid verdict.
+        """
+        return self.reward and self.maximizing and value == math.inf
 
     def satisfies_threshold(self, value: Any) -> bool:
         return self.result_valid(value) and self.op(value, self.threshold)

@@ -3,9 +3,8 @@
 // The specification (sketch.props) wants the message delivered with probability at least 0.9 (a constraint), and among the designs that do, the cheapest (an
 // objective). Only SAFE=1 delivers that often, so it is the answer, at a cost of 2.
 //
-// The design that is best for the objective alone is SAFE=0, and it violates the constraint. That is the situation of this benchmark: abstraction refinement
-// (and hybrid) stop at the root of their search, because the scheduler that minimizes the cost is one single design, and report that nothing satisfies the
-// specification. OneByOne and CEGIS find SAFE=1. See tests/synthesizer/test_known_unsound_pruning.py.
+// The design that is best for the objective alone is SAFE=0, and it violates the constraint: the scheduler that minimizes the cost over both designs is one
+// single design, which does not settle the search.
 dtmc
 
 hole int SAFE in {0,1};
