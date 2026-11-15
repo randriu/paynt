@@ -352,6 +352,7 @@ void bindings_coloring(py::module& m) {
             py::overload_cast<synthesis::Family const&, storm::storage::BitVector const&>(&synthesis::Coloring::selectCompatibleChoices, py::const_)
         )
         .def("collectHoleOptions", &synthesis::Coloring::collectHoleOptions)
+        .def("statesWithoutChoice", &synthesis::Coloring::statesWithoutChoice)
         ;
 
     py::classh<synthesis::ColoringSmt<>>(m, "ColoringSmt")

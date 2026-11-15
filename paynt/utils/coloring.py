@@ -237,3 +237,38 @@ def _if(condition: Any, then: Any, otherwise: Any) -> Any:
 def _any_of(variable: Any, options: list[int]) -> Any:
     """The formula that the variable is one of the options."""
     return z3.Or([variable == option for option in options]) if options else False
+
+
+class ChoiceCoverage:
+    """Which states every design of a parameter space keeps a choice in.
+
+    A sub-MDP of several designs holds every choice that one of them takes, so a state where some design keeps none still has the choices of the others: the
+    sub-MDP says nothing about the design that gets stuck there. The states that some design of the whole parameter space leaves without a choice are found
+    once; only those are looked at again for a parameter space.
+    """
+
+    def __init__(self, colored_mdp: Any):
+        self.coloring = colored_mdp.coloring
+        self.row_groups = colored_mdp.underlying_mdp.nondeterministic_choice_indices
+        self.general = is_general_coloring(self.coloring)
+        self.incomplete = self._without_a_choice(colored_mdp.parameter_space, range(colored_mdp.underlying_mdp.nr_states))
+
+    def states_without_a_choice(self, parameter_space: paynt.parameter_space.parameter_space.ParameterSpace, states: Any) -> list[int]:
+        """The given states in which some design of parameter_space keeps no choice."""
+        if not self.incomplete:
+            return []
+        states = set(states)
+        return self._without_a_choice(parameter_space, [state for state in self.incomplete if state in states])
+
+    def _without_a_choice(self, parameter_space: paynt.parameter_space.parameter_space.ParameterSpace, states: Any) -> list[int]:
+        if not self.general:
+            return list(self.coloring.statesWithoutChoice(parameter_space.native, list(states)))
+        domain = parameter_space_formula(parameter_space)
+        without = []
+        for state in states:
+            colors = [choice_formula(self.coloring, choice, parameter_space) for choice in range(self.row_groups[state], self.row_groups[state + 1])]
+            solver = z3.Solver()
+            solver.add(domain, z3.Not(z3.Or(colors)))
+            if solver.check() == z3.sat:
+                without.append(state)
+        return without

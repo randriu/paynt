@@ -128,11 +128,12 @@ class MdpSpecificationResult(SpecificationResult):
             results.append(self.optimality_result)
         return results
 
-    def evaluate(self, parameter_space: Any = None, admissible_assignment: Any = None, admissible_value: Any = None) -> None:
+    def evaluate(self, admissible_assignment: Any = None, admissible_value: Any = None) -> None:
         """Decide what the node holds.
 
-        :param parameter_space: the designs of the node
-        :param admissible_assignment: a design of the node that satisfies the whole specification (with an objective, improves the optimum), if one was found
+        :param admissible_assignment: a design of the node that satisfies the whole specification (with an objective, improves the optimum), if one was found;
+            when every design satisfies the constraints, it is the one to return, if one of them is not skipped (see
+            paynt.utils.error_handling.DeadlockedDesigns)
         :param admissible_value: its value of the objective
         """
         self.improving_assignment = None
@@ -148,15 +149,12 @@ class MdpSpecificationResult(SpecificationResult):
             return
 
         if opt is None:
-            if cr.sat is True:
-                # every design satisfies every constraint
-                self.improving_assignment = admissible_assignment if admissible_assignment is not None else parameter_space
-                self.can_improve = False
-            elif admissible_assignment is not None:
+            if admissible_assignment is not None:
                 # one admissible design is all a specification without an objective asks for
                 self.improving_assignment = admissible_assignment
                 self.can_improve = False
             else:
+                # undecided; or every design satisfies every constraint, but the one tried is skipped
                 self.can_improve = True
             return
 

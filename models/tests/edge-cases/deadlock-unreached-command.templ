@@ -1,0 +1,18 @@
+// With H=0 state 1 is reached and has no command; the command it has with H=1 is never reached, but it is enough to skip H=0. H=1 reaches the goal with
+// probability 1/2. Mixing the two gives probability 1 at best and 1/2 at worst, so every design that is not skipped satisfies P>=0.25, but no single
+// scheduler of the family is one design.
+dtmc
+
+hole int H in {0,1};
+
+module m
+    s : [0..4] init 0;
+    [] s=0 & H=0 -> (s'=1);
+    [] s=0 & H=1 -> (s'=2);
+    [] s=1 & H=1 -> (s'=3);
+    [] s=2 & H=1 -> 1/2 : (s'=3) + 1/2 : (s'=4);
+    [] s=3 -> true;
+    [] s=4 -> true;
+endmodule
+
+label "goal" = s=3;

@@ -10,6 +10,7 @@ import paynt.synthesizer.synthesizer
 import paynt.synthesizer.search_node
 import paynt.specification.property_result
 import paynt.model.model
+import paynt.utils.error_handling
 import paynt.utils.scoring
 
 import logging
@@ -56,13 +57,18 @@ def scheduler_scores_combined(colored_mdp: paynt.colored_mdp.ColoredMdp, task: p
     return combined
 
 
-def set_design_apart(colored_mdp: paynt.colored_mdp.ColoredMdp, node: paynt.synthesizer.search_node.SearchNode, result: Any) -> tuple[int, list[list[int]]]:
+def set_design_apart(
+    colored_mdp: paynt.colored_mdp.ColoredMdp, node: paynt.synthesizer.search_node.SearchNode, result: Any = None
+) -> tuple[int, list[list[int]]]:
     """(the splitter, its suboptions) that separate the design of a consistent scheduler from the others on one parameter it uses.
 
     The designs that agree with it on every parameter it uses behave like it, so each such split brings it closer to a node of its own.
+
+    :param result: the result whose scheduler it is; None if there is none (every design satisfies the constraints, but the one tried is skipped): then the node
+        is halved
     """
     assert node.mdp is not None
-    used = colored_mdp.scheduler_selection(node.mdp, result.primary.result.get_scheduler())
+    used = colored_mdp.scheduler_selection(node.mdp, result.primary.result.get_scheduler()) if result is not None else []
     splitters = [parameter for parameter, options in enumerate(used) if options and node.parameter_space.parameter_num_options(parameter) > 1]
     if not splitters:
         # every design of the node agrees with it where it matters, though the model has not collapsed into one design yet
@@ -86,8 +92,7 @@ def split_parameter_space(
     """
     mdp = node.mdp
     assert mdp is not None
-    assert not mdp.is_deterministic
-
+    # a deterministic node is split only when the design tried is skipped: the designs of the node that are not skipped all behave like that model
     assert node.analysis_result is not None
     results = node.analysis_result.undecided_results()
 
@@ -114,8 +119,9 @@ def split_parameter_space(
                     if option not in used_options:
                         used_options.append(option)
     else:
-        # (iii) every scheduler left is one design, which does not settle the node (it violates a constraint, or its value is not valid): set it apart
-        return node.split(*set_design_apart(colored_mdp, node, candidates[0]))
+        # (iii) every scheduler left is one design, which does not settle the node (it violates a constraint, its value is not valid, or it is skipped): set
+        # it apart
+        return node.split(*set_design_apart(colored_mdp, node, candidates[0] if candidates else None))
 
     if len(used_options) > 1:
         core_suboptions, other_suboptions = node.parameter_space.suboptions_enumerate(splitter, used_options)
@@ -183,9 +189,10 @@ class SynthesizerAR(paynt.synthesizer.synthesizer.Synthesizer):
 
             # a design the best case comes from may satisfy the whole specification, which says nothing about the other designs
             result.primary_selection, consistent = self.colored_mdp.scheduler_is_consistent(mdp, node, result.primary.result, spec)
-            if consistent:
-                assignment = node.parameter_space.assume_options_copy(result.primary_selection)
-                accepting, value = self.colored_mdp.build_assignment(assignment).check_specification(spec).accepting_dtmc(spec)
+            assignment = node.parameter_space.assume_options_copy(result.primary_selection) if consistent else None
+            design = self.build_design(assignment) if assignment is not None else None
+            if design is not None:
+                accepting, value = design.check_specification(spec).accepting_dtmc(spec)
                 better = admissible_assignment is None or (spec.optimality is not None and value is not None and spec.optimality.op(value, admissible_value))
                 if accepting and better:
                     admissible_assignment, admissible_value = assignment, value
@@ -208,9 +215,21 @@ class SynthesizerAR(paynt.synthesizer.synthesizer.Synthesizer):
 
         if spec.optimality is not None and spec_result.constraints_result.sat is not False:
             spec_result.optimality_result = self.check_objective(node, model, several_designs)
+        elif spec_result.constraints_result.sat is True and admissible_assignment is None:
+            # every design satisfies every constraint: any one that is not skipped will do
+            assignment = node.parameter_space.pick_any()
+            if not several_designs or self.build_design(assignment) is not None:
+                admissible_assignment = assignment
 
-        spec_result.evaluate(node.parameter_space, admissible_assignment, admissible_value)
+        spec_result.evaluate(admissible_assignment, admissible_value)
         node.analysis_result = spec_result
+
+    def build_design(self, assignment: paynt.parameter_space.parameter_space.ParameterSpace) -> paynt.model.model.SubMdp | None:
+        """The model of a design of a node with several designs, or None if the design is skipped, which the other designs of the node need not be."""
+        try:
+            return self.colored_mdp.build_assignment(assignment)
+        except paynt.utils.error_handling.DeadlockedDesigns:
+            return None
 
     def check_objective(
         self, node: paynt.synthesizer.search_node.SearchNode, model: paynt.model.model.Mdp, several_designs: bool
@@ -242,13 +261,19 @@ class SynthesizerAR(paynt.synthesizer.synthesizer.Synthesizer):
         else:
             assignment = node.parameter_space
         # the design the best case comes from, the best design of the node
-        res = self.colored_mdp.build_assignment(assignment).check_specification(spec)
+        design = self.build_design(assignment)
+        if design is None:
+            # it is skipped, the other designs may not be (the node of a single design that is skipped is never checked)
+            return result
+        res = design.check_specification(spec)
         assert res.constraints_result is not None
         value = res.optimality_result.value
         if res.constraints_result.sat and opt.improves_optimum(value):
             result.improving_assignment = assignment
             result.improving_value = value
-            result.can_improve = False
+            # the best design of the node if it attains the best case; Storm's scheduler for a minimized reward may not (with an end component of zero
+            # reward), and then another design may do better
+            result.can_improve = several_designs and opt.meets_op(result.primary.value, value)
         elif several_designs and not opt.result_valid(value):
             # it never surely reaches the target, the other designs may: the best case is infinite, or Storm's scheduler for a finite one is not the best (for
             # a minimized reward it can pick a choice that leaves the target unreachable)
@@ -261,7 +286,14 @@ class SynthesizerAR(paynt.synthesizer.synthesizer.Synthesizer):
 
     def verify_parameter_space(self, node: paynt.synthesizer.search_node.SearchNode) -> None:
         parent_selected_choices = node.parent_info.selected_choices if node.parent_info is not None else None
-        node.mdp, node.selected_choices = self.colored_mdp.build(node.parameter_space, parent_selected_choices)
+        try:
+            node.mdp, node.selected_choices = self.colored_mdp.build(node.parameter_space, parent_selected_choices)
+        except paynt.utils.error_handling.DeadlockedDesigns as error:
+            # every design of the node is skipped: nothing in it to find
+            logger.warning(error)
+            node.analysis_result = paynt.specification.property_result.MdpSpecificationResult()
+            node.analysis_result.can_improve = False
+            return
         assert self.stat is not None
 
         # TODO include iteration_game in iteration? is it necessary?

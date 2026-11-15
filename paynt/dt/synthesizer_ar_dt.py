@@ -112,7 +112,7 @@ class SynthesizerARDt(paynt.synthesizer.synthesizer_ar.SynthesizerAR):
         spec_result = paynt.specification.property_result.MdpSpecificationResult()
         spec_result.constraints_result = paynt.specification.property_result.ConstraintsResult([])
         spec_result.optimality_result = paynt.specification.property_result.MdpOptimalityResult(None)
-        spec_result.evaluate(None)
+        spec_result.evaluate()
         spec_result.can_improve = False
         return spec_result
 
@@ -207,8 +207,8 @@ class SynthesizerARDt(paynt.synthesizer.synthesizer_ar.SynthesizerAR):
     def split_with_parent_info(self, node, splitter, suboptions, scheduler_choices=None):
         """The child search nodes of a split.
 
-        :param scheduler_choices: the inconsistent scheduler of a single-property specification, whose result a child keeps while the scheduler stays
-            available in it (see verify_parameter_space); None to check every child anew
+        :param scheduler_choices: the inconsistent scheduler of a single-property specification, whose result a child keeps while the scheduler stays available
+            in it (see verify_parameter_space); None to check every child anew
         """
         # construct corresponding child search nodes (SearchNode.split snapshots node's ParentInfo-relevant
         # state and hands it, shared, to every freshly-split child); layer the DT-specific parent_info

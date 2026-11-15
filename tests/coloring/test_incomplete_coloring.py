@@ -21,6 +21,7 @@ import paynt.parser.sketch
 import paynt.synthesizer.smpmc
 import paynt.synthesizer.synthesizer
 import paynt.utils.coloring_builder
+import paynt.utils.error_handling
 
 from tests.helpers.models import get_sketch_paths, load_colored_mdp, load_sketch
 
@@ -191,25 +192,28 @@ class TestRobustSynthesisIsRefused:
 
 
 class TestAStateLeftWithoutAChoice:
-    """The options of a hand-written parameter are the user's: one that a state of the group does not offer leaves that state with nothing to do."""
+    """The options of a hand-written parameter are the user's: one that a state of the group does not offer leaves that state with nothing to do, and the design
+    is skipped."""
 
     def test_the_error_names_the_state(self):
         colored_mdp, _task, options = incomplete_maze((2,), all_actions=True)
         assignment = colored_mdp.parameter_space.copy()
         assignment.parameter_set_options(0, [options.index("place")])
         for build in (colored_mdp.build_assignment, lambda space: colored_mdp.build(space)):
-            with pytest.raises(ValueError, match=r"the coloring enables no choice in state \d+, which is reachable"):
+            with pytest.raises(
+                paynt.utils.error_handling.DeadlockedDesigns, match=r"skipping design A_x2=place: state \d+ \(.*\) is reachable and keeps no choice"
+            ):
                 build(assignment)
 
     @pytest.mark.parametrize("method", ["onebyone", "smpmc"])
-    def test_an_engine_reports_it(self, method):
+    def test_an_engine_skips_it_and_warns(self, method, caplog):
         """The engine is given the option that leaves the state without a choice and no other: an engine that searches does not have to try an option on its own
         if it can rule it out together with others, and whether SMPMC does depends on the order of the decisions of Z3, which depends on what Z3 has done before
         in the process."""
         colored_mdp, task, options = incomplete_maze((2,), all_actions=True)
         colored_mdp.parameter_space.parameter_set_options(0, [options.index("place")])
-        with pytest.raises(ValueError, match="the coloring enables no choice in state"):
-            paynt.synthesizer.synthesizer.Synthesizer.for_method(colored_mdp, task, method).run()
+        assert not paynt.synthesizer.synthesizer.Synthesizer.for_method(colored_mdp, task, method).run().success
+        assert any(record.levelname == "WARNING" and record.getMessage().startswith("skipping design A_x2=place") for record in caplog.records)
 
     def test_the_offered_actions_alone_are_fine(self):
         colored_mdp, task, options = incomplete_maze((2,))

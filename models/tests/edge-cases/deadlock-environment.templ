@@ -1,0 +1,17 @@
+// P is a policy, E an environment. With P=0 the goal is reached at once, unless E=1: then state 1 has no command (it has one with E=0). With P=1 the goal
+// is reached with probability 1/2, whatever E. So P=1 is the only policy that keeps a choice in every environment, and its worst case is 1/2.
+dtmc
+
+hole int P in {0,1};
+hole int E in {0,1};
+
+module m
+    s : [0..3] init 0;
+    [] s=0 & P=0 -> (s'=1);
+    [] s=0 & P=1 -> 1/2 : (s'=2) + 1/2 : (s'=3);
+    [] s=1 & E=0 -> (s'=2);
+    [] s=2 -> true;
+    [] s=3 -> true;
+endmodule
+
+label "goal" = s=2;

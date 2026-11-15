@@ -5,6 +5,7 @@ from typing import Any
 import paynt.parameter_space.parameter_space
 import paynt.synthesizer.search_node
 import paynt.synthesizer.synthesizer
+import paynt.utils.error_handling
 
 import logging
 
@@ -23,7 +24,12 @@ class SynthesizerOneByOne(paynt.synthesizer.synthesizer.Synthesizer):
                 break
 
             assignment = node.parameter_space.construct_assignment(parameter_combination)
-            dtmc = self.colored_mdp.build_assignment(assignment)
+            try:
+                dtmc = self.colored_mdp.build_assignment(assignment)
+            except paynt.utils.error_handling.DeadlockedDesigns as error:
+                logger.warning(error)
+                self.explore(assignment)
+                continue
             assert self.stat is not None
             self.stat.iteration(dtmc)
             result = dtmc.check_specification(self.task.specification, short_evaluation=True)
@@ -49,7 +55,13 @@ class SynthesizerOneByOne(paynt.synthesizer.synthesizer.Synthesizer):
             if self.resource_limit_reached():
                 break
             assignment = parameter_space.construct_assignment(parameter_combination)
-            model = self.colored_mdp.build_assignment(assignment)
+            try:
+                model = self.colored_mdp.build_assignment(assignment)
+            except paynt.utils.error_handling.DeadlockedDesigns as error:
+                # not a design: it has no evaluation
+                logger.warning(error)
+                self.explore(assignment)
+                continue
             self.stat.iteration(model)
             result = model.model_check_property(prop)
             if keep_value_only:

@@ -79,6 +79,9 @@ class SubMdp(Mdp):
         super().__init__(model)
         self.underlying_mdp_choice_map = underlying_mdp_choice_map
         self.underlying_mdp_state_map = underlying_mdp_state_map
+        # the states of the underlying MDP whose choices decide which choices the sub-MDP keeps: its own, unless it keeps away from states without a choice
+        # (see ColoredMdp.build), which depends on the choices of every state reached
+        self.deciding_states = underlying_mdp_state_map
 
 
 class Smg(Mdp):
@@ -108,6 +111,8 @@ class SubmodelBuilder:
         builder_options = stormpy.transformations.SubsystemBuilderOptions()
         builder_options.build_state_mapping = True
         builder_options.build_action_mapping = True
+        # a state left without a choice is reported by restrict(), instead of by an error that Storm also logs
+        builder_options.fix_deadlocks = True
         return builder_options
 
     @staticmethod
@@ -118,12 +123,15 @@ class SubmodelBuilder:
         :return: (1) the restricted model
         :return: (2) sub- to full state mapping
         :return: (3) sub- to full action mapping
+        :raises paynt.utils.error_handling.StateWithoutChoice: if the selected actions leave a state they reach without one
         """
         keep_unreachable_states = False  # TODO investigate this
         all_states = stormpy.datastructures.BitVector(mdp.nr_states, True)
         submodel_construction = stormpy.transformations.build_submodel(
             mdp, all_states, choices, keep_unreachable_states=keep_unreachable_states, options=builder_options
         )
+        if submodel_construction.deadlock_label is not None:
+            raise paynt.utils.error_handling.StateWithoutChoice()
         model = submodel_construction.model
         state_map = submodel_construction.new_to_old_state_index_mapping.copy()
         choice_map = submodel_construction.new_to_old_action_index_mapping.copy()

@@ -485,11 +485,9 @@ BitVector ColoringGeneral::selectCompatibleChoices(Family const& family, BitVect
             continue;
         }
 
-        bool any_enabled = false;
         for(uint64_t choice = row_groups[state]; choice < row_groups[state+1]; ++choice) {
             if(choice_root[choice] < 0) {
                 // uncolored: always enabled, even outside base_choices
-                any_enabled = true;
                 selection.set(choice,true);
                 visitChoice(choice,state_reached,unexplored);
                 continue;
@@ -504,12 +502,11 @@ BitVector ColoringGeneral::selectCompatibleChoices(Family const& family, BitVect
                 keep = exactSat(choice_root[choice], family, state_data[state], choice_data[choice]);
             }
             if(keep) {
-                any_enabled = true;
                 selection.set(choice,true);
                 visitChoice(choice,state_reached,unexplored);
             }
         }
-        STORM_LOG_THROW(any_enabled, storm::exceptions::UnexpectedException, "no choice is available in the sub-MDP");
+        // a state that keeps no choice is left so: the caller decides what that means for the members that reach it
     }
     return selection;
 }

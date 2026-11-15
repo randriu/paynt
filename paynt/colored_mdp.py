@@ -7,7 +7,7 @@ Here the coloring may also be incomplete: a state may keep several choices under
 C[theta] is an MDP and not a Markov chain. The specification is then to hold for the best resolution of the choices theta leaves, in the direction of each
 property -- as if every such state had a policy parameter of its own that model checking, rather than the search, sets. Definition 2 is the case where
 nothing is left to resolve. Incomplete coloring is supported for a single property; and not by robust synthesis, whose policy has to be explicit (see
-ColoredMdp.build_assignment). Every reachable state must still keep at least one choice.
+ColoredMdp.build_assignment).
 
 This is the only concrete ColoredMdp class. `feature_kind` (set at construction, e.g. "dt"/"pomdp"/"posmg"/
 "family"/"pomdp_family"/"decpomdp") is what dispatch code and the 3 feature-dependent branches below key off,
@@ -63,6 +63,10 @@ class ColoredMdp:
         # internal plumbing needed by build()/scheduler_selection() below, not part of the public contract
         self.subsystem_builder_options = paynt.model.model.SubmodelBuilder.default_builder_options()
         self.choice_destinations = paynt.model.model.ModelIndex.compute_choice_destinations(underlying_mdp)
+        # the parameters in the colors of the choices of each state, see relevant_parameters
+        self._state_to_parameters: Any = None
+        # see states_without_a_choice
+        self._choice_coverage: paynt.utils.coloring.ChoiceCoverage | None = None
 
     @property
     def has_general_coloring(self) -> bool:
@@ -79,18 +83,27 @@ class ColoredMdp:
     ) -> tuple[paynt.model.model.SubMdp, Any]:
         """Compute the induced sub-MDP C[eta] for the given parameter (sub)space.
 
+        When some designs of eta reach a state that eta leaves without a choice, the sub-MDP keeps only the choices that keep away from such states: it then
+        holds every design of eta that is not skipped, though not every design it holds is one of those (a design may reach a state that keeps choices of other
+        designs alone).
+
         :param parent_selected_choices: optional reuse hint: the parent search node's own selected_choices (its compatible-choices bitmask). Since
             parameter_space is always a narrowing of the parent's (a child never widens what its parent already assumed), any choice compatible with
             parameter_space must already have been compatible with the parent -- so restricting the search to parent_selected_choices is sound and cannot miss a
             choice, only skip ones already known incompatible with an ancestor. None for the search root, which has no parent to reuse.
         :returns: (mdp, selected_choices)
+        :raises paynt.utils.error_handling.DeadlockedDesigns: if every design of eta is skipped, or eta is a single design that is
         """
         if parent_selected_choices is None:
             choices = self.coloring.selectCompatibleChoices(parameter_space.native)
         else:
             choices = self.coloring.selectCompatibleChoices(parameter_space.native, parent_selected_choices)
-        with paynt.utils.error_handling.explain_state_without_choice(self, choices, parameter_space):
+        try:
             mdp = paynt.model.model.SubmodelBuilder.build_submdp(self.underlying_mdp, choices, self.subsystem_builder_options)
+        except paynt.utils.error_handling.StateWithoutChoice:
+            choices, reached = paynt.utils.error_handling.choices_avoiding_deadlocks(self, choices, parameter_space)
+            mdp = paynt.model.model.SubmodelBuilder.build_submdp(self.underlying_mdp, choices, self.subsystem_builder_options)
+            mdp.deciding_states = reached
         return mdp, choices
 
     def build_assignment(self, parameter_space: paynt.parameter_space.parameter_space.ParameterSpace) -> paynt.model.model.SubMdp:
@@ -99,10 +112,12 @@ class ColoredMdp:
         An MDP results from an incomplete coloring, and always for "family"/"pomdp_family", where fixing the environment does not also fix the agent's policy.
         The remaining choices are then resolved by model checking, in the direction of the property (existentially). That is sound for a single property only,
         see Mdp.check_specification; robust synthesis rejects it, as its policy is a set of parameters chosen before the environment.
+
+        :raises paynt.utils.error_handling.DeadlockedDesigns: if theta leaves a state it reaches without a choice
         """
         assert parameter_space.size == 1, "expecting parameter space of size 1"
         choices = self.coloring.selectCompatibleChoices(parameter_space.native)
-        with paynt.utils.error_handling.explain_state_without_choice(self, choices, parameter_space):
+        with paynt.utils.error_handling.raise_deadlocked_design(self, choices, parameter_space):
             model, state_map, choice_map = paynt.model.model.SubmodelBuilder.restrict(self.underlying_mdp, choices, self.subsystem_builder_options)
         if self.feature_kind in ("family", "pomdp_family") or model.nr_choices != model.nr_states:
             return paynt.model.model.SubMdp(model, state_map, choice_map)
@@ -148,6 +163,53 @@ class ColoredMdp:
         )
         choices = paynt.model.model.ModelIndex.state_to_choice_to_choices(self.underlying_mdp, state_to_choice)
         return self.coloring.collectHoleOptions(choices)
+
+    def relevant_parameters(self, parameter_space: paynt.parameter_space.parameter_space.ParameterSpace, states: Any) -> set[int]:
+        """The parameters that decide which choices parameter_space selects in the given states of the underlying MDP: with any other parameter set differently,
+        the same choices are selected there (Theorem 6 of arXiv:2511.08078)."""
+        if self.has_general_coloring:
+            return set(self.coloring.relevantParameters(parameter_space.native, list(states)))
+        if self._state_to_parameters is None:
+            self._state_to_parameters = self.coloring.getStateToHoles()
+        relevant = stormpy.datastructures.BitVector(self.parameter_space.num_parameters, False)
+        for state in states:
+            relevant |= self._state_to_parameters[state]
+        return set(relevant)
+
+    def states_without_a_choice(self, parameter_space: paynt.parameter_space.parameter_space.ParameterSpace, states: Any) -> list[int]:
+        """The given states of the underlying MDP in which some design of parameter_space keeps no choice.
+
+        A design that reaches one gets stuck, though the sub-MDP of several designs still holds the choices that the others take there.
+        """
+        if self._choice_coverage is None:
+            self._choice_coverage = paynt.utils.coloring.ChoiceCoverage(self)
+        return self._choice_coverage.states_without_a_choice(parameter_space, states)
+
+    def find_deadlocked_design(
+        self, parameter_space: paynt.parameter_space.parameter_space.ParameterSpace
+    ) -> paynt.parameter_space.parameter_space.ParameterSpace | None:
+        """A design of parameter_space that leaves a state it reaches without a choice, or None if there is none.
+
+        The parameter space is split only where its sub-MDP reaches a state that some of its designs leave without a choice.
+        """
+        spaces = [parameter_space]
+        while spaces:
+            space = spaces.pop()
+            try:
+                mdp, _choices = self.build(space)
+            except paynt.utils.error_handling.DeadlockedDesigns:
+                # every design of the space is skipped
+                return space.pick_any()
+            uncovered = self.states_without_a_choice(space, mdp.deciding_states)
+            if not uncovered:
+                continue
+            # one design is never split: it keeps a choice in every state it reaches, or it is skipped above
+            assert space.size > 1
+            relevant = self.relevant_parameters(space, uncovered)
+            splittable = [parameter for parameter in range(space.num_parameters) if space.parameter_num_options(parameter) > 1]
+            splitter = next((parameter for parameter in splittable if parameter in relevant), splittable[0])
+            spaces += space.split(splitter, space.suboptions_half(splitter))
+        return None
 
     def build_from_choice_mask(self, choices: Any) -> paynt.model.model.SubMdp:
         """Restrict to a choice mask without needing a parameter space.

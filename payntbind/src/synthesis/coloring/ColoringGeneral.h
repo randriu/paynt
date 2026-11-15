@@ -126,9 +126,8 @@ public:
     /**
      * The choices that some member of the family may enable: at a relevant state, every uncolored choice and every
      * colored one whose color is not F; at an irrelevant state, its first choice, whatever its color. With state
-     * exploration, only the states reached from the initial state get choices.
-     * @throws storm::exceptions::UnexpectedException if a reached relevant state keeps no choice: no member of the
-     *   family enables a choice there.
+     * exploration, only the states reached from the initial state get choices. A relevant state where no member of
+     * the family enables a choice keeps none.
      */
     BitVector selectCompatibleChoices(Family const& family);
     /**

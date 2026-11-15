@@ -1,4 +1,5 @@
-"""Every engine against the reference on small random sketches: a DTMC of a few states, where a hole decides which distribution some states take.
+"""Every engine against the reference on small random sketches: a DTMC of a few states, where a hole decides which distribution some states take, and may leave
+one without a command (the designs that reach it there are skipped).
 
 A threshold lies between two values of the designs, at least MARGIN away from all of them, so that the verdict does not depend on the precision.
 PAYNT_RANDOM_SKETCHES sets the number of sketches, PAYNT_RANDOM_FIRST_SEED the seed of the first one.
@@ -22,7 +23,7 @@ FIRST_SEED = int(os.environ.get("PAYNT_RANDOM_FIRST_SEED", "0"))
 
 
 def random_sketch(rng):
-    """The text of a random DTMC sketch with an absorbing goal, and maybe an absorbing sink."""
+    """The text of a random DTMC sketch with an absorbing goal, and maybe an absorbing sink and states that some options of a hole leave without a command."""
     num_states = rng.randint(3, 6)
     goal = num_states - 1
     absorbing = {goal, goal - 1} if rng.random() < 0.5 else {goal}
@@ -38,6 +39,8 @@ def random_sketch(rng):
         if rng.random() < 0.7:
             name, options = rng.choice(holes)
             guards = [(f"s={state} & {name}={option}", f"a{state}_{option}") for option in range(options)]
+            if rng.random() < 0.15:
+                guards.pop(rng.randrange(options))
         else:
             guards = [(f"s={state}", f"a{state}")]
         for guard, action in guards:
@@ -64,7 +67,8 @@ def as_decimal(number):
 
 def random_specification(rng, sketch_path):
     """Properties on the goal: one or two constraints, an objective, or an objective with a constraint."""
-    probabilities = [design.values[0] for design in Reference(sketch_path, ['P=? [F "goal"]']).designs]
+    # every design may be skipped
+    probabilities = [design.values[0] for design in Reference(sketch_path, ['P=? [F "goal"]']).designs] or [Fraction(0)]
     costs = [design.values[0] for design in Reference(sketch_path, ['R{"cost"}=? [F "goal"]']).designs]
     finite_costs = [cost for cost in costs if cost != float("inf")] or [Fraction(0)]
     probability = f'P{rng.choice([">=", ">", "<=", "<"])}{as_decimal(threshold(rng, probabilities))} [F "goal"]'

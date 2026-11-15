@@ -70,7 +70,10 @@ class SynthesizerCEGIS(paynt.synthesizer.synthesizer.Synthesizer):
         assert node.mdp is not None, "analyzed parameter space does not have an associated underlying MDP"
         assert self.stat is not None
 
-        dtmc = self.colored_mdp.build_assignment(assignment)
+        try:
+            dtmc = self.colored_mdp.build_assignment(assignment)
+        except paynt.utils.error_handling.DeadlockedDesigns as error:
+            return [self.deadlock_conflict(error)], None
         self.stat.iteration(dtmc)
         result = dtmc.check_specification(self.task.specification, node.constraint_indices, short_evaluation=True)
         # analyze model checking results
@@ -90,11 +93,27 @@ class SynthesizerCEGIS(paynt.synthesizer.synthesizer.Synthesizer):
 
         return conflicts, accepting_assignment
 
+    def deadlock_conflict(self, error: paynt.utils.error_handling.DeadlockedDesigns) -> list[int]:
+        """The conflict of a design that is skipped: the parameters that decide the choices on its way to the state it leaves without a choice, on which every
+        design that agrees with it is skipped too."""
+        conflict = sorted(self.colored_mdp.relevant_parameters(error.parameter_space, error.states))
+        if len(conflict) == error.parameter_space.num_parameters:
+            logger.warning(error)
+        else:
+            names = ", ".join(self.colored_mdp.parameter_space.parameter_name(parameter) for parameter in conflict)
+            logger.warning(f"{error}; so is every design that agrees with it on {names}" if conflict else f"{error}; so is every design")
+        return conflict
+
     def synthesize_one(self, node: paynt.synthesizer.search_node.SearchNode) -> paynt.parameter_space.parameter_space.ParameterSpace | None:
 
         # build the induced sub-MDP, mapping mdp states to parameter indices
         parent_selected_choices = node.parent_info.selected_choices if node.parent_info is not None else None
-        node.mdp, node.selected_choices = self.colored_mdp.build(node.parameter_space, parent_selected_choices)
+        try:
+            node.mdp, node.selected_choices = self.colored_mdp.build(node.parameter_space, parent_selected_choices)
+        except paynt.utils.error_handling.DeadlockedDesigns as error:
+            logger.warning(error)
+            self.explore(node.parameter_space)
+            return None
         self.conflict_generator.initialize()
 
         # use sketch design space as a SAT baseline (TODO why?)

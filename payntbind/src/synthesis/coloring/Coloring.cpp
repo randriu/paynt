@@ -5,7 +5,7 @@ namespace synthesis {
 Coloring::Coloring(
     Family const& family, std::vector<uint64_t> const& row_groups,
     std::vector<std::vector<std::pair<uint64_t,uint64_t>>> choice_to_assignment
-) : family(family), choice_to_assignment(choice_to_assignment) {
+) : family(family), choice_to_assignment(choice_to_assignment), row_groups(row_groups) {
     
     auto num_choices = numChoices();
     colored_choices.resize(num_choices,false);
@@ -92,6 +92,79 @@ std::vector<std::vector<uint64_t>> Coloring::collectHoleOptions(BitVector const&
         }
     }
     return hole_options;
+}
+
+
+std::vector<uint64_t> Coloring::statesWithoutChoice(Family const& subfamily, std::vector<uint64_t> const& states) const {
+    std::vector<BitVector> options;
+    for(uint64_t hole = 0; hole < subfamily.numHoles(); ++hole) {
+        options.push_back(subfamily.holeOptionsMask(hole));
+    }
+    std::vector<uint64_t> without_choice;
+    for(auto state: states) {
+        std::vector<uint64_t> choices;
+        for(uint64_t choice = row_groups[state]; choice < row_groups[state+1]; ++choice) {
+            choices.push_back(choice);
+        }
+        if(not someColorHolds(choices, options)) {
+            without_choice.push_back(state);
+        }
+    }
+    return without_choice;
+}
+
+bool Coloring::someColorHolds(std::vector<uint64_t> const& choices, std::vector<BitVector>& options) const {
+    std::vector<uint64_t> possible;
+    for(auto choice: choices) {
+        bool enabled_by_some = true;
+        bool enabled_by_all = true;
+        for(auto const& [hole,option]: choice_to_assignment[choice]) {
+            if(not options[hole].get(option)) {
+                enabled_by_some = false;
+                break;
+            }
+            if(options[hole].getNumberOfSetBits() > 1) {
+                enabled_by_all = false;
+            }
+        }
+        if(not enabled_by_some) {
+            continue;
+        }
+        if(enabled_by_all) {
+            return true;
+        }
+        possible.push_back(choice);
+    }
+    if(possible.empty()) {
+        return false;
+    }
+    // no color holds for every assignment: try each option of a hole of theirs that has several
+    uint64_t split_hole = 0;
+    bool found = false;
+    for(auto choice: possible) {
+        for(auto const& [hole,option]: choice_to_assignment[choice]) {
+            if(options[hole].getNumberOfSetBits() > 1) {
+                split_hole = hole;
+                found = true;
+                break;
+            }
+        }
+        if(found) {
+            break;
+        }
+    }
+    BitVector saved = options[split_hole];
+    bool holds = true;
+    for(auto option: saved) {
+        options[split_hole] = BitVector(saved.size(), false);
+        options[split_hole].set(option, true);
+        if(not someColorHolds(possible, options)) {
+            holds = false;
+            break;
+        }
+    }
+    options[split_hole] = saved;
+    return holds;
 }
 
 }
