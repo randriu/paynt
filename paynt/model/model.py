@@ -16,6 +16,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# payntbind.synthesis.schedulerToStateToGlobalChoice's choice for a state where the scheduler has none
+UNDEFINED_CHOICE = 2**64 - 1
+
 
 class Mdp:
     @classmethod
@@ -116,10 +119,11 @@ class SubmodelBuilder:
         return builder_options
 
     @staticmethod
-    def restrict(mdp: Any, choices: Any, builder_options: Any) -> tuple[Any, list[int], list[int]]:
+    def restrict(mdp: Any, choices: Any, builder_options: Any, keep_states_without_choice: bool = False) -> tuple[Any, list[int], list[int]]:
         """Restrict the MDP to the selected actions.
 
         :param choices: a bitvector of selected actions
+        :param keep_states_without_choice: give a state that the actions leave without one a self-loop (Storm's), instead of raising
         :return: (1) the restricted model
         :return: (2) sub- to full state mapping
         :return: (3) sub- to full action mapping
@@ -130,7 +134,7 @@ class SubmodelBuilder:
         submodel_construction = stormpy.transformations.build_submodel(
             mdp, all_states, choices, keep_unreachable_states=keep_unreachable_states, options=builder_options
         )
-        if submodel_construction.deadlock_label is not None:
+        if submodel_construction.deadlock_label is not None and not keep_states_without_choice:
             raise paynt.utils.error_handling.StateWithoutChoice()
         model = submodel_construction.model
         state_map = submodel_construction.new_to_old_state_index_mapping.copy()
@@ -168,6 +172,38 @@ class ModelIndex:
         return [None] * model.nr_states
 
     @staticmethod
+    def states_reaching(model: Any, targets: Any) -> set[int]:
+        """The states from which some path of the model reaches one of the target states (given as a bit vector over the states)."""
+        destinations = ModelIndex.compute_choice_destinations(model)
+        row_groups = model.nondeterministic_choice_indices
+        predecessors: list[list[int]] = [[] for _ in range(model.nr_states)]
+        for state in range(model.nr_states):
+            for choice in range(row_groups[state], row_groups[state + 1]):
+                for destination in destinations[choice]:
+                    predecessors[destination].append(state)
+        reaching = {int(state) for state in targets}
+        queue = list(reaching)
+        while queue:
+            for predecessor in predecessors[queue.pop()]:
+                if predecessor not in reaching:
+                    reaching.add(predecessor)
+                    queue.append(predecessor)
+        return reaching
+
+    @staticmethod
+    def until_is_eventually(model: Any, until_formula: Any) -> bool:
+        """Whether `phi1 U phi2` holds on exactly the paths of the model where `F phi2` does: no state that satisfies neither side reaches one that satisfies
+        phi2.
+
+        Storm builds a model so when it is built for this formula alone and both sides are atomic: then those states are absorbing.
+        """
+        # state formulas: whatever the observations of a POMDP
+        left = stormpy.model_checking(model, until_formula.left_subformula, force_fully_observable=True).get_truth_values_vector()
+        right = stormpy.model_checking(model, until_formula.right_subformula, force_fully_observable=True).get_truth_values_vector()
+        reaching = ModelIndex.states_reaching(model, right)
+        return not any(not left.get(state) and not right.get(state) for state in reaching)
+
+    @staticmethod
     def discard_unreachable_choices(model: Any, choice_destinations: Any, state_to_choice: list[int | None]) -> list[int | None]:
         state_to_choice_reachable = ModelIndex.empty_scheduler(model)
         state_visited = [False] * model.nr_states
@@ -178,6 +214,9 @@ class ModelIndex:
             state = state_queue.pop()
             choice = state_to_choice[state]
             state_to_choice_reachable[state] = choice
+            if choice is None:
+                # a choice that does not matter: neither do the states after it
+                continue
             for dst in choice_destinations[choice]:
                 if not state_visited[dst]:
                     state_visited[dst] = True
@@ -197,14 +236,15 @@ class ModelIndex:
         param: discard_unreachable_choices: if True, unreachable choices in the underlying MDP are discarded
             from the state-to-choice mapping
         return: a state-to-choice mapping over the underlying MDP, where each state is mapped to the choice
-            selected by the scheduler in the sub-MDP, or None if the state is not reachable under the scheduler
+            selected by the scheduler in the sub-MDP, or None if the state is not reachable under the scheduler or the scheduler leaves its choice undefined
+            (Storm does where the choice does not matter for the property, e.g. where the left side of an until formula fails)
         """
         state_to_underlying_mdp_choice = payntbind.synthesis.schedulerToStateToGlobalChoice(scheduler, submdp.model, submdp.underlying_mdp_choice_map)
         state_to_choice = ModelIndex.empty_scheduler(underlying_mdp)
         for state in range(submdp.model.nr_states):
             underlying_mdp_choice = state_to_underlying_mdp_choice[state]
             underlying_mdp_state = submdp.underlying_mdp_state_map[state]
-            state_to_choice[underlying_mdp_state] = underlying_mdp_choice
+            state_to_choice[underlying_mdp_state] = None if underlying_mdp_choice == UNDEFINED_CHOICE else underlying_mdp_choice
         if discard_unreachable_choices:
             state_to_choice = ModelIndex.discard_unreachable_choices(underlying_mdp, choice_destinations, state_to_choice)
         return state_to_choice
@@ -287,9 +327,9 @@ class ModelIndex:
         if disable_expected_visits:
             return [1] * mdp.nr_states
 
-        # extract DTMC induced by this MDP-scheduler
+        # extract DTMC induced by this MDP-scheduler; where it has no choice (one that does not matter for the property), the state is absorbing
         builder_options = SubmodelBuilder.default_builder_options()
-        sub_mdp, state_map, _ = SubmodelBuilder.restrict(mdp, choices, builder_options)
+        sub_mdp, state_map, _ = SubmodelBuilder.restrict(mdp, choices, builder_options, keep_states_without_choice=True)
         dtmc = SubmodelBuilder.mdp_to_dtmc(sub_mdp)
         dtmc_visits = paynt.specification.property.Property.compute_expected_visits(dtmc)
 

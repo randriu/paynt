@@ -163,9 +163,7 @@ class Sketch:
         make_rewards_action_based(explicit_model)
         logger.debug(f"constructed explicit model having {explicit_model.nr_states} states and {explicit_model.nr_choices} choices")
 
-        if specification.contains_until_properties() and filetype != "prism":
-            logger.info("WARNING: using until formulae with non-PRISM inputs might lead to unexpected behaviour")
-        specification.transform_until_to_eventually()
+        specification.transform_until_to_eventually(explicit_model)
         logger.info(f"found the following specification {specification}")
 
         if export is not None:

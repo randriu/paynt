@@ -110,3 +110,34 @@ class TestHelpers:
     def test_only_a_game_property_has_a_game_formula(self, posmg_test_game, smpmc_tiny):
         assert posmg_test_game.task.get_property().has_game_formula
         assert not smpmc_tiny.task.get_property().has_game_formula
+
+
+class TestUntil:
+    """models/tests/edge-cases/until.templ: H=0 reaches the goal only through the bad state, so `!"bad" U "goal"` and `F "goal"` differ there."""
+
+    @staticmethod
+    def specification(tmp_path, *properties):
+        import paynt.parser.sketch
+        from tests.helpers.models import get_sketch_paths
+
+        props_path = tmp_path / "case.props"
+        props_path.write_text("\n".join(properties) + "\n")
+        _factory, task = paynt.parser.sketch.Sketch.load_sketch(get_sketch_paths("tests/edge-cases", "until.templ")[0], str(props_path))
+        return task.specification
+
+    def test_is_checked_as_reaching_the_goal_when_storm_makes_the_bad_state_absorbing(self, tmp_path):
+        """Storm does for a model built for this formula alone, with atomic sides."""
+        [prop] = self.specification(tmp_path, 'Pmax=? ["ok" U "goal"]').all_properties()
+        assert str(prop.formula) == 'Pmax=? [F "goal"]'
+
+    @pytest.mark.parametrize(
+        "properties", [['Pmax=? [!"bad" U "goal"]'], ['P>=0.1 [F "goal"]', 'Pmax=? ["ok" U "goal"]']], ids=["a negated side", "with another property"]
+    )
+    def test_stays_when_the_bad_state_can_reach_the_goal(self, tmp_path, properties):
+        prop = self.specification(tmp_path, *properties).all_properties()[-1]
+        assert prop.is_until
+
+    def test_what_needs_a_target_refuses_it(self, tmp_path):
+        prop = self.specification(tmp_path, 'Pmax=? [!"bad" U "goal"]').all_properties()[0]
+        with pytest.raises(NotImplementedError, match="is checked as an until formula"):
+            prop.get_target_label()

@@ -173,6 +173,20 @@ def _valuation(colored_mdp: paynt.colored_mdp.ColoredMdp, state: int) -> str:
     return ", ".join(f"{variable}={value}" for variable, value in valuation.items() if "_loc_prism2jani_" not in variable)
 
 
+def require_eventually(prop: paynt.specification.property.Property) -> None:
+    """Raise NotImplementedError if prop is an until formula that is checked as it is, for code that needs a target to reach.
+
+    An until formula `phi1 U phi2` is checked as `F phi2` when no state where neither side holds can reach phi2 (see Property.transform_until_to_eventually);
+    otherwise only model checking supports it.
+    """
+    if prop.is_until:
+        raise NotImplementedError(
+            f"{prop} is checked as an until formula, which this needs as reaching a target: a state where neither side holds can reach the right side "
+            "(an until formula is read as reaching its right side when Storm makes such states absorbing, as it does for a model built for this formula alone "
+            "with atomic sides)"
+        )
+
+
 def require_single_property_on_nondeterministic_model(model: paynt.model.model.Mdp, specification: paynt.specification.property.Specification) -> None:
     """Raise NotImplementedError if the model still has nondeterminism and the specification has several properties.
 

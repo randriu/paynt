@@ -32,7 +32,7 @@ The models in `models/tests`. "Designs" is the size of the parameter space.
 | `objective-optimum-violates-constraint` | DTMC sketch | 3 / 4 | 1 / 2 | `P>=0.9` and `R{"cost"}min` | the design best for the objective violates the constraint |
 | `max-reward-infinite-designs` | DTMC sketch | 4 / 5 | 1 / 2 | `R{"cost"}max`; `lower.props`: `R>=2.5` | an infinite maximum over the designs |
 | `constraint-decided-by-one-design` | DTMC sketches | 3 / 5; 4 / 8 (`hybrid.templ`) | 1 / 3 | a probability and a cost constraint | a constraint satisfied by the best design, not by all |
-| `edge-cases` | DTMC sketches | 3-5 / 3-8 | 1-3 / 1-12 | none: the properties are in `soundness/test_engines.py` | thresholds equal to a value, goals reached at once or never, degenerate holes, designs that reach a state without a command (skipped), a policy stuck in one environment (robust synthesis), a zero-cost loop that misleads Storm's scheduler |
+| `edge-cases` | DTMC sketches | 3-5 / 3-8 | 1-3 / 1-12 | none: the properties are in `soundness/test_engines.py` | thresholds equal to a value, goals reached at once or never, degenerate holes, designs that reach a state without a command (skipped), a policy stuck in one environment (robust synthesis), a zero-cost loop that misleads Storm's scheduler, until formulas that differ from reaching the goal |
 | `prob-goal` | DTMC sketch; `family.templ`: MDP family | 4 / 5; 3 / 6 | 1 / 2; 1 / 3 | `P>=0 [F "goal"]` | the prob0/prob1 constraint |
 | `mdp-family-avoid-8-2-easy` | MDP family | 21169 / 89776 | 6 / 3584 | `P>0.9` | policy trees, families in SMPMC, the coloring builder |
 | `mdp-family-rocks-4-2` | MDP family | 162 / 594 | 4 / 81 | `P>=1`; `max.props`: `Pmax` | robust SMPMC |

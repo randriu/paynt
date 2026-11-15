@@ -4,6 +4,8 @@ from typing import Any
 
 import stormpy
 import payntbind
+
+import paynt.utils.error_handling
 import fractions
 import math
 import operator
@@ -225,13 +227,29 @@ class Property:
     def has_game_formula(self) -> bool:
         return self.game_formula is not None
 
-    def transform_until_to_eventually(self) -> None:
-        if not self.is_until:
+    def transform_until_to_eventually(self, model: Any) -> None:
+        """Check an until formula `phi1 U phi2` as `F phi2` if the model gives both the same paths (see ModelIndex.until_is_eventually): more of PAYNT supports
+        a target to reach.
+
+        Otherwise the until formula stays, which only model checking supports.
+        """
+        if not self._until_is_eventually(model):
             return
-        logger.info("converting until formula to eventually...")
         formula = payntbind.synthesis.transform_until_to_eventually(self.property.get_raw_formula())
         prop = stormpy.logic.Property("", formula, set())
         self.__init__(prop, self.use_exact)  # type: ignore[misc]
+
+    def _until_is_eventually(self, model: Any) -> bool:
+        # local: paynt.model.model imports this module
+        from paynt.model.model import ModelIndex
+
+        if not self.is_until:
+            return False
+        if not ModelIndex.until_is_eventually(model, self.formula.subformula):
+            logger.info(f"checking {self} as it is: a state where neither side holds can reach the right side")
+            return False
+        logger.info(f"checking {self} as reaching its right side: no state where neither side holds can")
+        return True
 
     def property_copy(self) -> Any:
         return stormpy.logic.Property("", self.property.get_raw_formula().clone(), set())
@@ -277,6 +295,7 @@ class Property:
         return negated_property
 
     def get_target_label(self) -> str:
+        paynt.utils.error_handling.require_eventually(self)
         target = self.formula.subformula.subformula
         if isinstance(target, stormpy.logic.AtomicLabelFormula):
             target_label = target.label
@@ -388,10 +407,9 @@ class OptimalityProperty(Property):
             return self.optimum * (1 + self.model_checking_precision)
         return self.optimum * (1 - self.model_checking_precision)
 
-    def transform_until_to_eventually(self) -> None:
-        if not self.is_until:
+    def transform_until_to_eventually(self, model: Any) -> None:
+        if not self._until_is_eventually(model):
             return
-        logger.info("converting until formula to eventually...")
         formula = payntbind.synthesis.transform_until_to_eventually(self.property.get_raw_formula())
         prop = stormpy.logic.Property("", formula, set())
         self.__init__(prop, self.epsilon, self.use_exact)  # type: ignore[misc]
@@ -475,9 +493,9 @@ class Specification:
     def contains_until_properties(self) -> bool:
         return any(p.is_until for p in self.all_properties())
 
-    def transform_until_to_eventually(self) -> None:
+    def transform_until_to_eventually(self, model: Any) -> None:
         for p in self.all_properties():
-            p.transform_until_to_eventually()
+            p.transform_until_to_eventually(model)
 
     def check(self) -> None:
         # TODO

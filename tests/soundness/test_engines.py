@@ -90,6 +90,14 @@ CASES = [
     edge_case("unused-hole.templ", 'Pmin=? [F "goal"]'),
     edge_case("probability-hole.templ", 'P>=0.5 [F "goal"]'),
     edge_case("probability-hole.templ", 'Pmax=? [F "goal"]'),
+    # an until formula: checked as it is if a state where neither side holds can reach the goal, as reaching the goal otherwise
+    edge_case("until.templ", 'Pmax=? [!"bad" U "goal"]'),
+    edge_case("until.templ", 'Pmin=? [!"bad" U "goal"]'),
+    edge_case("until.templ", 'P>=0.4 [!"bad" U "goal"]'),
+    edge_case("until.templ", 'P<=0.4 [!"bad" U "goal"]'),
+    edge_case("until.templ", 'Pmax=? ["ok" U "goal"]'),
+    edge_case("until.templ", 'P>=0.1 [F "goal"]', 'Pmax=? ["ok" U "goal"]'),
+    edge_case("until.templ", 'P>=0.4 ["ok" U "goal"]', 'P>=0.4 [F "goal"]'),
     # Storm's scheduler for the least cost is not a design of least cost
     edge_case("zero-cost-loop.templ", 'R{"cost"}min=? [F "goal"]'),
     edge_case("zero-cost-loop.templ", 'P>=0.5 [F "goal"]', 'R{"cost"}min=? [F "goal"]'),
