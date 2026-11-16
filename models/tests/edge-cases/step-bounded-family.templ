@@ -1,0 +1,21 @@
+// Every member keeps both actions, so a policy is needed. Within two steps, a=0 reaches the goal with probability 0.9: safe first (1/2), then risky (1/2 * 0.8).
+// No memoryless policy does as well (safe twice 0.75, risky 0.8), so the best policy depends on the step. With a=1 risky is worse, and safe twice (0.75) is
+// best.
+mdp
+
+hole int a in {0,1};
+
+module m
+    s : [0..2] init 0;
+    [safe] s=0 -> 0.5 : (s'=1) + 0.5 : (s'=0);
+    [risky] s=0 & a=0 -> 0.8 : (s'=1) + 0.2 : (s'=2);
+    [risky] s=0 & a=1 -> 0.2 : (s'=1) + 0.8 : (s'=2);
+    [] s>0 -> true;
+endmodule
+
+label "goal" = s=1;
+
+rewards "steps"
+    [safe] true : 1;
+    [risky] true : 1;
+endrewards

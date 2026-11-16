@@ -141,3 +141,23 @@ class TestUntil:
         prop = self.specification(tmp_path, 'Pmax=? [!"bad" U "goal"]').all_properties()[0]
         with pytest.raises(NotImplementedError, match="is checked as an until formula"):
             prop.get_target_label()
+
+
+@pytest.mark.parametrize(
+    "text, bounded",
+    [
+        ('P>=0.5 [F<=2 "goal"]', True),
+        ('P>=0.5 ["ok" U<=2 "goal"]', True),
+        ('P>=0.5 [F[1,2] "goal"]', True),
+        ('P>=0.5 [X "goal"]', True),
+        ('R{"steps"}<=1 [C<=2]', True),
+        ('R{"steps"}<=1 [I=2]', True),
+        ('P>=0.5 [F "goal"]', False),
+        ('P>=0.5 ["ok" U "goal"]', False),
+        ('R{"steps"}<=1 [F "goal"]', False),
+        ('R{"steps"}<=1 [C]', False),
+    ],
+)
+def test_a_property_is_step_bounded(text, bounded):
+    prop = paynt.specification.property.Property(stormpy.parse_properties(text)[0])
+    assert prop.is_step_bounded == bounded

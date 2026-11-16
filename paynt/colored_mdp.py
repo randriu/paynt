@@ -132,7 +132,7 @@ class ColoredMdp:
 
         If theta leaves one choice per state, those are its choices. If it leaves several (an incomplete coloring, see build_assignment), it is the choices of a
         best policy for the single property of the specification -- in the direction that satisfies it, as when it was checked -- so the uncolored choices it
-        takes are in the mask too.
+        takes are in the mask too. None if that property is step-bounded: its best policy depends on the step, and Storm gives none.
         """
         model = self.build_assignment(assignment)
         if model.is_deterministic:
@@ -141,6 +141,9 @@ class ColoredMdp:
                 choices.set(choice, True)
             return choices
         prop = specification.optimality if specification.optimality is not None else specification.constraints[0]
+        if prop.is_step_bounded:
+            logger.warning(f"no policy is reported for {assignment}: the best policy for {str(prop).strip()} depends on the step, and Storm gives none")
+            return None
         scheduler = model.model_check_property(prop).result.get_scheduler()
         state_to_choice = paynt.model.model.ModelIndex.scheduler_to_state_to_choice(self.underlying_mdp, self.choice_destinations, model, scheduler)
         return paynt.model.model.ModelIndex.state_to_choice_to_choices(self.underlying_mdp, state_to_choice)

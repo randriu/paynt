@@ -9,6 +9,7 @@ from ..synthesizer import DtSynthesizer
 from ..result import DtResult
 from .._utils import DtInfo, DONT_CARE_ACTION_LABEL
 import paynt.task
+import paynt.utils.error_handling
 import paynt.utils.timer
 import paynt.model.model
 from ._utils import (
@@ -52,8 +53,14 @@ def _run_dtnest(
 
 
 class DtNest(DtSynthesizer):
-    def __init__(self, *args: Any):
-        super().__init__(*args)
+    def __init__(self, colored_mdp_factory: Any, task: paynt.task.SynthesisTask, *args: Any):
+        paynt.utils.error_handling.require_no_step_bounds(
+            task.specification,
+            "--dtnest",
+            "it searches with AR, which needs Storm's best scheduler of an MDP, and " + paynt.utils.error_handling.NO_SCHEDULER_FOR_STEP_BOUNDS,
+            "use decision-tree synthesis with --method smpmc instead",
+        )
+        super().__init__(colored_mdp_factory, task, *args)
         self.best_tree: DecisionTree | None = None
         self.best_tree_value: Any = None
 

@@ -83,6 +83,13 @@ class DtSynthesizer:
         method: str = "ar",
     ):
         paynt.utils.error_handling.require_supported_method(method, DT_INNER_METHODS, "decision-tree synthesis")
+        if method == "ar":
+            paynt.utils.error_handling.require_no_step_bounds(
+                task.specification,
+                "decision-tree synthesis with --method ar",
+                "AR needs Storm's best scheduler of an MDP, and " + paynt.utils.error_handling.NO_SCHEDULER_FOR_STEP_BOUNDS,
+                "use --method smpmc",
+            )
         self.colored_mdp_factory = colored_mdp_factory
         self.task = task
         self.method = method

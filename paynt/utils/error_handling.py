@@ -209,6 +209,29 @@ def require_no_maximizing_reward(specification: paynt.specification.property.Spe
         raise NotImplementedError("CEGIS (also inside hybrid) does not support maximizing reward properties; use --method ar, onebyone or smpmc")
 
 
+#: the end of the reason why what needs Storm's scheduler of an MDP (AR and what is built on it) cannot handle a step-bounded property
+NO_SCHEDULER_FOR_STEP_BOUNDS = "Storm gives no scheduler for them, as the best policy depends on the step"
+
+
+def require_no_step_bounds(specification: paynt.specification.property.Specification, what: str, reason: str, alternative: str) -> None:
+    """Raise NotImplementedError if a property of the specification is step-bounded (see Property.is_step_bounded), which `what` does not support.
+
+    :param what: what does not support them, as a noun phrase, e.g. "AR (also inside hybrid)"
+    :param reason: why not
+    :param alternative: what to do instead
+    """
+    bounded = [str(prop).strip() for prop in specification.all_properties() if prop.is_step_bounded]
+    if bounded:
+        raise NotImplementedError(f"{what} does not support step-bounded properties such as {'; '.join(bounded)}: {reason}; {alternative}")
+
+
+def require_probability_properties(specification: paynt.specification.property.Specification, what: str, alternative: str) -> None:
+    """Raise NotImplementedError if the specification has a reward property, which `what` (a noun phrase) does not support."""
+    rewards = [str(prop).strip() for prop in specification.all_properties() if prop.reward]
+    if rewards:
+        raise NotImplementedError(f"{what} supports only probability properties, not {'; '.join(rewards)}; {alternative}")
+
+
 def require_single_property(specification: paynt.specification.property.Specification) -> None:
     """Raise NotImplementedError if the specification has several properties, which SMPMC does not support."""
     if specification.num_properties > 1:

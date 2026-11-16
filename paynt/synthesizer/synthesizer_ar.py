@@ -141,6 +141,15 @@ def split_parameter_space(
 
 
 class SynthesizerAR(paynt.synthesizer.synthesizer.Synthesizer):
+    def __init__(self, colored_mdp: paynt.colored_mdp.ColoredMdp, task: paynt.task.SynthesisTask):
+        super().__init__(colored_mdp, task)
+        paynt.utils.error_handling.require_no_step_bounds(
+            task.specification,
+            "AR (also inside hybrid)",
+            "it splits the family by the choices of Storm's best scheduler of the family's MDP, and " + paynt.utils.error_handling.NO_SCHEDULER_FOR_STEP_BOUNDS,
+            "use --method onebyone or smpmc",
+        )
+
     @property
     def method_name(self) -> str:
         return "AR"

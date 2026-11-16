@@ -40,6 +40,17 @@ class PolicyTreeSynthesizer(paynt.synthesizer.synthesizer.Synthesizer):
 
     def __init__(self, colored_mdp: paynt.colored_mdp.ColoredMdp, task: paynt.task.SynthesisTask):
         paynt.utils.error_handling.require_pair_list_coloring(colored_mdp.coloring, "the policy tree")
+        alternative = "use --method onebyone or smpmc for a member and a policy, or --method smpmc --constraint exists_forall for one policy for every member"
+        paynt.utils.error_handling.require_probability_properties(
+            task.specification, "the policy tree (an MDP family with --method ar, cegis or hybrid)", alternative
+        )
+        paynt.utils.error_handling.require_no_step_bounds(
+            task.specification,
+            "the policy tree (an MDP family with --method ar, cegis or hybrid)",
+            "it solves a game about reaching a target and takes its policies from Storm's schedulers, and "
+            + paynt.utils.error_handling.NO_SCHEDULER_FOR_STEP_BOUNDS,
+            alternative,
+        )
         super().__init__(colored_mdp, task)
 
     @property

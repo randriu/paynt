@@ -224,6 +224,23 @@ class Property:
         return self.formula.subformula.is_until_formula
 
     @property
+    def is_step_bounded(self) -> bool:
+        """Whether the property looks a bounded number of steps ahead: a step-bounded until or eventually (F<=k, U<=k, F[a,b]), next (X), or a cumulative (C<=k)
+        or instantaneous (I=k) reward.
+
+        Storm gives no scheduler for such a property on an MDP: the best policy depends on the step.
+        """
+        path_formula = self.formula.subformula
+        bounded_kinds = (
+            stormpy.logic.BoundedUntilFormula,
+            stormpy.logic.CumulativeRewardFormula,
+            stormpy.logic.DiscountedCumulativeRewardFormula,
+            stormpy.logic.InstantaneousRewardFormula,
+        )
+        # stormpy has no class for a next formula, which Storm prints as "X <formula>"
+        return isinstance(path_formula, bounded_kinds) or str(path_formula).startswith("X ")
+
+    @property
     def has_game_formula(self) -> bool:
         return self.game_formula is not None
 

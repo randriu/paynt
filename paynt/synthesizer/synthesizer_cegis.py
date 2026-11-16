@@ -20,6 +20,12 @@ logger = logging.getLogger(__name__)
 class SynthesizerCEGIS(paynt.synthesizer.synthesizer.Synthesizer):
     def __init__(self, colored_mdp: paynt.colored_mdp.ColoredMdp, task: paynt.task.SynthesisTask):
         super().__init__(colored_mdp, task)
+        paynt.utils.error_handling.require_no_step_bounds(
+            task.specification,
+            "CEGIS (also inside hybrid)",
+            "its counterexamples need an until or reachability formula without a step bound",
+            "use --method onebyone or smpmc",
+        )
 
         # the DTMC conflict generator, or the MDP one for an assignment whose model still has nondeterminism
         self.conflict_generator = paynt.synthesizer.conflict_generator.auto.ConflictGeneratorAuto(colored_mdp, task)
