@@ -96,18 +96,30 @@ std::vector<std::vector<uint64_t>> Coloring::collectHoleOptions(BitVector const&
 
 
 std::vector<uint64_t> Coloring::statesWithoutChoice(Family const& subfamily, std::vector<uint64_t> const& states) const {
-    std::vector<BitVector> options;
-    for(uint64_t hole = 0; hole < subfamily.numHoles(); ++hole) {
-        options.push_back(subfamily.holeOptionsMask(hole));
-    }
-    std::vector<uint64_t> without_choice;
+    std::vector<std::vector<uint64_t>> groups;
     for(auto state: states) {
         std::vector<uint64_t> choices;
         for(uint64_t choice = row_groups[state]; choice < row_groups[state+1]; ++choice) {
             choices.push_back(choice);
         }
-        if(not someColorHolds(choices, options)) {
-            without_choice.push_back(state);
+        groups.push_back(choices);
+    }
+    std::vector<uint64_t> without_choice;
+    for(auto group: groupsWithoutChoice(subfamily, groups)) {
+        without_choice.push_back(states[group]);
+    }
+    return without_choice;
+}
+
+std::vector<uint64_t> Coloring::groupsWithoutChoice(Family const& subfamily, std::vector<std::vector<uint64_t>> const& groups) const {
+    std::vector<BitVector> options;
+    for(uint64_t hole = 0; hole < subfamily.numHoles(); ++hole) {
+        options.push_back(subfamily.holeOptionsMask(hole));
+    }
+    std::vector<uint64_t> without_choice;
+    for(uint64_t group = 0; group < groups.size(); ++group) {
+        if(not someColorHolds(groups[group], options)) {
+            without_choice.push_back(group);
         }
     }
     return without_choice;

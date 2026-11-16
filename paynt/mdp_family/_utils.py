@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 import payntbind
+import stormpy
 
 import paynt.colored_mdp
 import paynt.parameter_space.parameter_space
@@ -33,6 +34,61 @@ class MdpFamilyInfo:
     state_action_choices: list[list[list[int]]]
     # for each state of the underlying MDP, a list of available actions
     state_to_actions: list[list[int]]
+    # the (state, action) pairs whose action some member of the family does not offer in the state, see actions_some_member_lacks
+    partial_actions: list[tuple[int, int]] | None = None
+
+
+def actions_some_member_lacks(
+    colored_mdp: paynt.colored_mdp.ColoredMdp, parameter_space: paynt.parameter_space.parameter_space.ParameterSpace
+) -> list[tuple[int, int]]:
+    """The (state, action) pairs whose action some member of parameter_space does not offer in the state: a policy that takes it there gets stuck in that
+    member, which it then does not satisfy.
+
+    Those of the whole family are found once; only they are looked at again.
+    """
+    info = cast(MdpFamilyInfo, colored_mdp.feature_info)
+    if info.partial_actions is None:
+        every = [(state, action) for state, actions in enumerate(info.state_to_actions) for action in actions]
+        info.partial_actions = _lacked(colored_mdp, colored_mdp.parameter_space, every)
+    if not info.partial_actions:
+        return []
+    return _lacked(colored_mdp, parameter_space, info.partial_actions)
+
+
+def _lacked(
+    colored_mdp: paynt.colored_mdp.ColoredMdp,
+    parameter_space: paynt.parameter_space.parameter_space.ParameterSpace,
+    state_actions: list[tuple[int, int]],
+) -> list[tuple[int, int]]:
+    info = cast(MdpFamilyInfo, colored_mdp.feature_info)
+    groups = [info.state_action_choices[state][action] for state, action in state_actions]
+    return [state_actions[group] for group in colored_mdp.coloring.groupsWithoutChoice(parameter_space.native, groups)]
+
+
+def stuck_choices(colored_mdp: paynt.colored_mdp.ColoredMdp, parameter_space: paynt.parameter_space.parameter_space.ParameterSpace) -> Any:
+    """The choices of the actions that some member of parameter_space does not offer in their state, for the game abstraction."""
+    info = cast(MdpFamilyInfo, colored_mdp.feature_info)
+    choices = stormpy.datastructures.BitVector(colored_mdp.underlying_mdp.nr_choices, False)
+    for state, action in actions_some_member_lacks(colored_mdp, parameter_space):
+        for choice in info.state_action_choices[state][action]:
+            choices.set(choice, True)
+    return choices
+
+
+def policy_gets_stuck(
+    colored_mdp: paynt.colored_mdp.ColoredMdp,
+    parameter_space: paynt.parameter_space.parameter_space.ParameterSpace,
+    mdp: paynt.model.model.SubMdp,
+    policy: list[int | None],
+) -> bool:
+    """Whether the policy takes, in a state of mdp (the policy applied to parameter_space's choices), an action that some member of parameter_space does not
+    offer there.
+
+    The states are those reached with the members' choices combined, so the member that lacks the action may never reach the state itself: False is certain,
+    True may be a false alarm.
+    """
+    reached = set(mdp.underlying_mdp_state_map)
+    return any(state in reached and policy[state] == action for state, action in actions_some_member_lacks(colored_mdp, parameter_space))
 
 
 def empty_policy(colored_mdp: paynt.colored_mdp.ColoredMdp) -> list[int | None]:

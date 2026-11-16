@@ -46,6 +46,8 @@ public:
 
     /** The given states in which some member of the family enables none of the state's choices. */
     std::vector<uint64_t> statesWithoutChoice(Family const& subfamily, std::vector<uint64_t> const& states) const;
+    /** The indices of the given groups of choices of which some member of the family enables none. */
+    std::vector<uint64_t> groupsWithoutChoice(Family const& subfamily, std::vector<std::vector<uint64_t>> const& groups) const;
     
 protected:
 

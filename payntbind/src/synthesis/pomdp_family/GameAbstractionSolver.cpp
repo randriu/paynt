@@ -79,7 +79,9 @@ namespace synthesis {
 
 
     template<typename ValueType>
-    void GameAbstractionSolver<ValueType>::solveSg(storm::storage::BitVector const& quotient_choice_mask) {
+    void GameAbstractionSolver<ValueType>::solveSg(
+        storm::storage::BitVector const& quotient_choice_mask, storm::storage::BitVector const& stuck_choices
+    ) {
         if(profiling_enabled) {
             this->timer_total.start();
         }
@@ -166,6 +168,7 @@ namespace synthesis {
                 player2_num_rows++;
             } else {
                 // state is not target
+                bool may_get_stuck = false;
                 for(auto choice: player2_state_to_choices[player2_state]) {
                     // transition to the corresponding states of Player 1 and gain zero reward
                     for(auto const& entry: this->quotient.getTransitionMatrix().getRow(choice)) {
@@ -175,6 +178,15 @@ namespace synthesis {
                     }
                     player2_choice_to_quotient_choice.push_back(choice);
                     player2_row_rewards.push_back(0);
+                    player2_num_rows++;
+                    may_get_stuck = may_get_stuck or stuck_choices[choice];
+                }
+                if(may_get_stuck) {
+                    // some member does not offer the action: stuck, with a unit reward (the target) if Player 1 minimizes and none if it maximizes; reported
+                    // as the first choice of the action
+                    player2_matrix_builder.addNextValue(player2_num_rows,player1_target_state,1);
+                    player2_choice_to_quotient_choice.push_back(player2_state_to_choices[player2_state].front());
+                    player2_row_rewards.push_back(this->player1_maximizing ? 0 : 1);
                     player2_num_rows++;
                 }
             }
@@ -196,7 +208,8 @@ namespace synthesis {
         if(profiling_enabled) {
             this->timer_game_solving.start();
         }
-        solver->solveGame(this->env, player1_direction, player2_direction, player1_state_values, player2_row_rewards);
+        this->env.solver().game().setMaximalNumberOfIterations(this->max_policy_iterations);
+        this->solution_converged = solver->solveGame(this->env, player1_direction, player2_direction, player1_state_values, player2_row_rewards);
         if(profiling_enabled) {
             this->timer_game_solving.stop();
         }
@@ -296,6 +309,7 @@ namespace synthesis {
 
         uint64_t quotient_initial_state = *(this->quotient.getInitialStates().begin());
         this->solution_value = this->solution_state_values[quotient_initial_state];
+        this->solution_converged = true;
     }
 
 

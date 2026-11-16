@@ -361,6 +361,7 @@ void bindings_coloring(py::module& m) {
         )
         .def("collectHoleOptions", &synthesis::Coloring::collectHoleOptions)
         .def("statesWithoutChoice", &synthesis::Coloring::statesWithoutChoice)
+        .def("groupsWithoutChoice", &synthesis::Coloring::groupsWithoutChoice)
         ;
 
     py::classh<synthesis::ColoringSmt<>>(m, "ColoringSmt")

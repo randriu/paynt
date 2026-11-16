@@ -9,6 +9,7 @@ import paynt.colored_mdp
 import paynt.synthesizer.search_node
 import paynt.parameter_space.parameter_space
 import paynt.mdp_family._utils
+import paynt.utils.error_handling
 from paynt.specification.property import Property
 import paynt.utils.timer
 
@@ -47,7 +48,7 @@ def merge_policies(policy1: Policy, policy2: Policy) -> Policy | None:
         return None
     policy1_actions, _ = policy1
     policy2_actions, _ = policy2
-    policy = [a1 or policy2_actions[state] for state, a1 in enumerate(policy1_actions)]
+    policy = [a1 if a1 is not None else policy2_actions[state] for state, a1 in enumerate(policy1_actions)]
     mask = [state for state, action in enumerate(policy) if action is not None]
     return (policy, mask)
 
@@ -74,7 +75,9 @@ def double_check_policy(
 
     Takes colored_mdp/node explicitly (not a Synthesizer instance) since it needs no search state, just the representation and a policy to check.
     """
-    _, mdp = paynt.mdp_family._utils.fix_and_apply_policy_to_parameter_space(colored_mdp, node.selected_choices, policy)
+    (policy_fixed, _), mdp = paynt.mdp_family._utils.fix_and_apply_policy_to_parameter_space(colored_mdp, node.selected_choices, policy)
+    if paynt.mdp_family._utils.policy_gets_stuck(colored_mdp, node.parameter_space, mdp, policy_fixed):
+        logger.warning("policy should be SAT but some member does not offer one of its actions")
     if node.parameter_space.size == 1:
         paynt.mdp_family._utils.assert_mdp_is_deterministic(colored_mdp, mdp, node.parameter_space)
     DOUBLE_CHECK_PRECISION = 1e-6
@@ -161,6 +164,9 @@ class PolicyTreeNode(paynt.synthesizer.search_node.SearchNode):
             self.suboptions[target] += self.suboptions[j]
             assert self.splitter is not None
             self.child_nodes[target].parameter_space.parameter_set_options(self.splitter, self.suboptions[target])
+            # the choices of the members of the merged node: those of either
+            if self.child_nodes[target].selected_choices is not None and self.child_nodes[j].selected_choices is not None:
+                self.child_nodes[target].selected_choices = self.child_nodes[target].selected_choices | self.child_nodes[j].selected_choices
             self.suboptions.pop(j)
             self.child_nodes.pop(j)
 
@@ -212,23 +218,33 @@ class PolicyTreeNode(paynt.synthesizer.search_node.SearchNode):
             return policy
 
         policy12, policy21 = merge_policies_exclusively(policy1, policy2)
-
-        # try policy1 for node2's parameter space
-        policy, mdp = paynt.mdp_family._utils.fix_and_apply_policy_to_parameter_space(colored_mdp, node2.selected_choices, policy12)
-        policy_result = mdp.model_check_property(prop, alt=True)
-        PolicyTreeNode.mdps_model_checked += 1
-        if policy_result.sat:
-            return policy
-
-        # try policy2 for node1's parameter space
-        policy, mdp = paynt.mdp_family._utils.fix_and_apply_policy_to_parameter_space(colored_mdp, node1.selected_choices, policy21)
-        policy_result = mdp.model_check_property(prop, alt=True)
-        PolicyTreeNode.mdps_model_checked += 2
-        if policy_result.sat:
-            return policy
-
+        # try policy1 for node2's parameter space, then policy2 for node1's
+        for policy_ext, policy_own, node in ((policy12, policy1, node2), (policy21, policy2, node1)):
+            PolicyTreeNode.mdps_model_checked += 1
+            policy = PolicyTreeNode.extend_to(colored_mdp, prop, node, policy_ext, policy_own)
+            if policy is not None:
+                return policy
         # neither fits
         return None
+
+    @staticmethod
+    def extend_to(
+        colored_mdp: paynt.colored_mdp.ColoredMdp, prop: Property, node: PolicyTreeNode, policy: list[int | None], policy_own: Policy
+    ) -> Policy | None:
+        """The policy, extending policy_own (the policy of the other node, whose actions it takes where that one has any), for the members of node too, if it
+        satisfies prop in all of them: it offers them its action wherever it goes. None if it does not."""
+        try:
+            (policy_fixed, _), mdp = paynt.mdp_family._utils.fix_and_apply_policy_to_parameter_space(colored_mdp, node.selected_choices, policy)
+        except paynt.utils.error_handling.StateWithoutChoice:
+            # an action of the policy that no member of the node offers
+            return None
+        if paynt.mdp_family._utils.policy_gets_stuck(colored_mdp, node.parameter_space, mdp, policy_fixed):
+            return None
+        if not mdp.model_check_property(prop, alt=True).sat:
+            return None
+        # where the node's members do not go, the actions for the other node's
+        actions = [action if action is not None else policy_own[0][state] for state, action in enumerate(policy_fixed)]
+        return (actions, [state for state, action in enumerate(actions) if action is not None])
 
     def merge_children_having_compatible_policies(self, colored_mdp: paynt.colored_mdp.ColoredMdp, prop: Property, policies: list[Policy | None]) -> None:
         if self.is_leaf:
@@ -240,22 +256,22 @@ class PolicyTreeNode(paynt.synthesizer.search_node.SearchNode):
                 i += 1
                 continue
 
-            join_to_i = [i]
-            # collect other children to merge to i
-            for j in range(i + 1, len(self.child_nodes)):
+            j = i + 1
+            while j < len(self.child_nodes):
                 child2 = self.child_nodes[j]
                 if child2.sat is not True:
+                    j += 1
                     continue
                 policy = PolicyTreeNode.make_policies_compatible(colored_mdp, prop, child1, child2, policies)
                 if policy is None:
+                    j += 1
                     continue
                 # nodes can be merged
                 assert child1.policy_index is not None and child2.policy_index is not None
                 policies[child1.policy_index] = policy
                 policies[child2.policy_index] = None
-                join_to_i.append(j)
-
-            self.merge_children_indices(join_to_i)
+                # merged right away: the next sibling is checked against every member of child1 so far
+                self.merge_children_indices([i, j])
             i += 1
 
     def skip_redundant_children(self) -> None:
