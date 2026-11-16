@@ -24,7 +24,7 @@ jobs:
       - name: Run Docker
         run: docker run -d -it --name performance paynt-performance
       - name: Download the results of earlier runs
-        uses: dawidd6/action-download-artifact@v27
+        uses: dawidd6/action-download-artifact@v28
         with:
           workflow: performance.yml
           name: performance-history
