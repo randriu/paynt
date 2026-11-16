@@ -82,12 +82,13 @@ def test_only_a_boolean_of_the_model_is_a_boolean_variable(domain, is_bool):
     assert paynt.dt.decision_tree.DtVariable("v", domain).is_bool_var is is_bool
 
 
-@pytest.mark.xfail(strict=True, raises=RuntimeError, reason="the choices of the states that no tree decides are dropped, so the initial state has none")
 def test_a_scheduler_from_a_file_is_mapped_to_a_tree(tmp_path):
-    """The optimal scheduler of dt-maze, written by Storm, given as --tree-map-scheduler."""
+    """The optimal scheduler of dt-maze, written by Storm, given as --tree-map-scheduler: a tree of depth 3 makes its choices, so it has its value."""
     factory, task = load_sketch("tests/dt-maze")
     mdp = factory.build().underlying_mdp
-    scheduler = stormpy.model_checking(mdp, task.get_property().formula, extract_scheduler=True).get_scheduler()
-    (tmp_path / "scheduler.json").write_text(scheduler.to_json_str(mdp))
-    factory, task = load_sketch("tests/dt-maze", task_kwargs={"scheduler_path": str(tmp_path / "scheduler.json")})
-    assert paynt.dt.DtSynthesizer(factory, task).run().success
+    result = stormpy.model_checking(mdp, task.get_property().formula, extract_scheduler=True)
+    (tmp_path / "scheduler.json").write_text(result.get_scheduler().to_json_str(mdp))
+    factory, task = load_sketch("tests/dt-maze", task_kwargs={"scheduler_path": str(tmp_path / "scheduler.json"), "tree_depth": 3})
+    mapped = paynt.dt.DtSynthesizer(factory, task).run()
+    assert mapped.success
+    assert mapped.value == pytest.approx(result.get_value(mdp.initial_states[0]))

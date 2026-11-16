@@ -116,9 +116,10 @@ def scheduler_json_to_choices(
 
     if discard_unreachable_states:
         state_to_choice = paynt.model.model.ModelIndex.discard_unreachable_choices(underlying_mdp, colored_mdp.choice_destinations, state_to_choice)
+
+    choices = paynt.model.model.ModelIndex.state_to_choice_to_choices(underlying_mdp, state_to_choice)
     # keep only relevant states
     state_to_choice = [choice if info.state_is_relevant[state] else None for state, choice in enumerate(state_to_choice)]
-    choices = paynt.model.model.ModelIndex.state_to_choice_to_choices(underlying_mdp, state_to_choice)
 
     scheduler_json_relevant = []
     for state_decision in scheduler_json:

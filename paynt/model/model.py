@@ -239,15 +239,20 @@ class ModelIndex:
             selected by the scheduler in the sub-MDP, or None if the state is not reachable under the scheduler or the scheduler leaves its choice undefined
             (Storm does where the choice does not matter for the property, e.g. where the left side of an until formula fails)
         """
-        state_to_underlying_mdp_choice = payntbind.synthesis.schedulerToStateToGlobalChoice(scheduler, submdp.model, submdp.underlying_mdp_choice_map)
+        state_to_underlying_mdp_choice = ModelIndex.scheduler_choices(scheduler, submdp.model, submdp.underlying_mdp_choice_map)
         state_to_choice = ModelIndex.empty_scheduler(underlying_mdp)
         for state in range(submdp.model.nr_states):
-            underlying_mdp_choice = state_to_underlying_mdp_choice[state]
-            underlying_mdp_state = submdp.underlying_mdp_state_map[state]
-            state_to_choice[underlying_mdp_state] = None if underlying_mdp_choice == UNDEFINED_CHOICE else underlying_mdp_choice
+            state_to_choice[submdp.underlying_mdp_state_map[state]] = state_to_underlying_mdp_choice[state]
         if discard_unreachable_choices:
             state_to_choice = ModelIndex.discard_unreachable_choices(underlying_mdp, choice_destinations, state_to_choice)
         return state_to_choice
+
+    @staticmethod
+    def scheduler_choices(scheduler: Any, model: Any, choice_map: list[int]) -> list[int | None]:
+        """The choice of a memoryless deterministic scheduler of the model in each of its states, mapped by choice_map; None where the scheduler leaves it
+        undefined (Storm does where the choice does not matter for the property, e.g. where the left side of an until formula fails)."""
+        choices = payntbind.synthesis.schedulerToStateToGlobalChoice(scheduler, model, choice_map)
+        return [None if choice == UNDEFINED_CHOICE else choice for choice in choices]
 
     @staticmethod
     def state_to_choice_to_choices(model: Any, state_to_choice: list[int | None]) -> Any:
