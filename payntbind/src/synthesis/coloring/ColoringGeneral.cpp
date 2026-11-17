@@ -120,7 +120,7 @@ ColoringGeneral::ColoringGeneral(
                 support |= node_support[choice_root[choice]];
             }
         }
-        state_to_holes_[state] = std::move(support);
+        state_to_holes_[state] = std::vector<uint64_t>(support.begin(), support.end());
     }
 
     query_stamp.assign(numNodes(),0); state_stamp.assign(numNodes(),0); choice_stamp.assign(numNodes(),0);
@@ -219,7 +219,7 @@ void ColoringGeneral::visitChoice(uint64_t choice, BitVector& state_reached, std
     }
 }
 
-std::vector<BitVector> const& ColoringGeneral::getStateToHoles() const {
+std::vector<std::vector<uint64_t>> const& ColoringGeneral::getStateToHoles() const {
     return state_to_holes_;
 }
 

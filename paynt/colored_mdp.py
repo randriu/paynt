@@ -174,10 +174,10 @@ class ColoredMdp:
             return set(self.coloring.relevantParameters(parameter_space.native, list(states)))
         if self._state_to_parameters is None:
             self._state_to_parameters = self.coloring.getStateToHoles()
-        relevant = stormpy.datastructures.BitVector(self.parameter_space.num_parameters, False)
+        relevant: set[int] = set()
         for state in states:
-            relevant |= self._state_to_parameters[state]
-        return set(relevant)
+            relevant.update(self._state_to_parameters[state])
+        return relevant
 
     def states_without_a_choice(self, parameter_space: paynt.parameter_space.parameter_space.ParameterSpace, states: Any) -> list[int]:
         """The given states of the underlying MDP in which some design of parameter_space keeps no choice.

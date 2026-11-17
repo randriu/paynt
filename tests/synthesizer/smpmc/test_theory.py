@@ -89,19 +89,20 @@ class TestColoredMdpTheoryOutOfRangeValues:
 
 
 class TestColoredMdpTheoryRelevantParameters:
-    """relevant_parameters(eta, sub_mdp) is the union of the static per-state supports (coloring.getStateToHoles()) over the states of the sub-MDP C[eta]; it is
-    computed with BitVector ORs and has to agree with the union of plain sets."""
+    """relevant_parameters(eta, sub_mdp): the parameters in the colors of the choices of the states of the sub-MDP C[eta]."""
 
     @staticmethod
-    def union_of_sets(colored_mdp, sub_mdp):
-        supports = colored_mdp.coloring.getStateToHoles()
+    def parameters_in_colors(colored_mdp, sub_mdp):
+        pairs = colored_mdp.coloring.getChoiceToAssignment()
+        row_groups = colored_mdp.underlying_mdp.nondeterministic_choice_indices
         union = set()
         for state in sub_mdp.underlying_mdp_state_map:
-            union.update(supports[state])
+            for choice in range(row_groups[state], row_groups[state + 1]):
+                union.update(parameter for parameter, _option in pairs[choice])
         return union
 
     @pytest.mark.parametrize("project", ["tests/smpmc-tiny", "tests/generic-maze", "tests/mdp-family-avoid-8-2-easy"])
-    def test_agrees_with_the_union_of_the_per_state_supports(self, project):
+    def test_is_the_parameters_in_the_colors_of_the_sub_mdp(self, project):
         factory, task = load_sketch(project)
         colored_mdp = factory.build()
         specification = task.specification
@@ -117,7 +118,7 @@ class TestColoredMdpTheoryRelevantParameters:
             sub_mdp, _choices = colored_mdp.build(eta)
             relevant = theory.relevant_parameters(eta, sub_mdp)
             assert isinstance(relevant, set)
-            assert relevant == self.union_of_sets(colored_mdp, sub_mdp), f"{num_fixed} parameters fixed"
+            assert relevant == self.parameters_in_colors(colored_mdp, sub_mdp), f"{num_fixed} parameters fixed"
 
     def test_the_sub_mdp_of_a_smaller_space_depends_on_no_more_parameters(self, smpmc_tiny):
         prop = smpmc_tiny.task.specification.constraints[0]

@@ -137,8 +137,8 @@ public:
      */
     BitVector selectCompatibleChoices(Family const& family, BitVector const& base_choices);
 
-    /** Static per-state parameter supports: the parameters in the colors of the state's choices, whatever the family. */
-    std::vector<BitVector> const& getStateToHoles() const;
+    /** Static per-state parameter supports: the parameters in the colors of the state's choices, whatever the family, sorted. */
+    std::vector<std::vector<uint64_t>> const& getStateToHoles() const;
 
     /**
      * Per-query refinement of getStateToHoles, for conflict minimization (Theorem 6 of the SMPMC paper): a set P of
@@ -206,7 +206,7 @@ protected:
     enum class Scope : uint8_t { Query = 0, State = 1, Choice = 2 };
     std::vector<Scope> node_scope;
     std::vector<BitVector> node_support; // per node, the parameters (transitively) referenced
-    std::vector<BitVector> state_to_holes_; // static per-state supports, computed once at construction
+    std::vector<std::vector<uint64_t>> state_to_holes_; // static per-state supports, computed once at construction
 
     bool exact_mode = false;
     bool state_exploration_enabled = false;

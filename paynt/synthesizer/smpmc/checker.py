@@ -199,10 +199,12 @@ class ColoredMdpTheory:
         """
         if self.stat is None:
             return
+        # a set: in a robust search, with a parameter per state, a conflict can hold tens of thousands of them
+        conflict = set(conflict_parameters)
         pruning_estimate = math.prod(
             self.colored_mdp.parameter_space.parameter_num_options(parameter)
             for parameter in range(self.colored_mdp.parameter_space.num_parameters)
-            if parameter not in conflict_parameters
+            if parameter not in conflict
         )
         assert self.stat.synthesizer.explored is not None
         self.stat.synthesizer.explored += pruning_estimate

@@ -1,5 +1,7 @@
 #include "Coloring.h"
 
+#include <algorithm>
+
 namespace synthesis {
 
 Coloring::Coloring(
@@ -19,23 +21,18 @@ Coloring::Coloring(
     }
 
 
-    auto num_holes = family.numHoles();
-    choice_to_holes.resize(num_choices);
-    for(uint64_t choice = 0; choice<num_choices; ++choice) {
-        choice_to_holes[choice] = BitVector(num_holes,false);
-        for(auto const& [hole,option]: choice_to_assignment[choice]) {
-            choice_to_holes[choice].set(hole,true);
-        }
-    }
-
-
+    // sorted lists rather than bit vectors over all holes, which are quadratic when every state has its own hole (robust search over an MDP family)
     auto num_states = row_groups.size()-1;
     state_to_holes.resize(num_states);
     for(uint64_t state = 0; state<num_states; ++state) {
-        state_to_holes[state] = BitVector(num_holes,false);
+        auto& holes = state_to_holes[state];
         for(uint64_t choice = row_groups[state]; choice<row_groups[state+1]; ++choice) {
-            state_to_holes[state] = state_to_holes[state] | choice_to_holes[choice]; 
+            for(auto const& [hole,option]: choice_to_assignment[choice]) {
+                holes.push_back(hole);
+            }
         }
+        std::sort(holes.begin(), holes.end());
+        holes.erase(std::unique(holes.begin(), holes.end()), holes.end());
     }
 }
 
@@ -47,7 +44,7 @@ std::vector<std::vector<std::pair<uint64_t,uint64_t>>> const& Coloring::getChoic
     return choice_to_assignment;
 }
 
-std::vector<BitVector> const& Coloring::getStateToHoles() const {
+std::vector<std::vector<uint64_t>> const& Coloring::getStateToHoles() const {
     return state_to_holes;
 }
 
