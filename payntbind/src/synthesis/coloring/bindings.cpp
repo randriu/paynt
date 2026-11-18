@@ -18,6 +18,8 @@
 #include <storm/models/sparse/Mdp.h>
 #include <storm/models/sparse/NondeterministicModel.h>
 #include <storm/storage/BitVector.h>
+
+#include <limits>
 #include <storm/storage/sparse/JaniChoiceOrigins.h>
 
 #include <storm/storage/scheduler/Scheduler.h>
@@ -127,7 +129,13 @@ std::vector<uint64_t> schedulerToStateToGlobalChoice(
     std::vector<uint64_t> state_to_choice(num_states);
     auto const& nci = sub_mdp.getNondeterministicChoiceIndices();
     for(uint64_t state=0; state<num_states; ++state) {
-        uint64_t choice = nci[state] + scheduler.getChoice(state).getDeterministicChoice();
+        auto const& scheduler_choice = scheduler.getChoice(state);
+        if(not scheduler_choice.isDefined()) {
+            // the choice in this state does not matter for the property (e.g. where the left side of an until formula fails): none
+            state_to_choice[state] = std::numeric_limits<uint64_t>::max();
+            continue;
+        }
+        uint64_t choice = nci[state] + scheduler_choice.getDeterministicChoice();
         uint64_t choice_global = choice_to_global_choice[choice];
         state_to_choice[state] = choice_global;
     }
@@ -352,6 +360,8 @@ void bindings_coloring(py::module& m) {
             py::overload_cast<synthesis::Family const&, storm::storage::BitVector const&>(&synthesis::Coloring::selectCompatibleChoices, py::const_)
         )
         .def("collectHoleOptions", &synthesis::Coloring::collectHoleOptions)
+        .def("statesWithoutChoice", &synthesis::Coloring::statesWithoutChoice)
+        .def("groupsWithoutChoice", &synthesis::Coloring::groupsWithoutChoice)
         ;
 
     py::classh<synthesis::ColoringSmt<>>(m, "ColoringSmt")

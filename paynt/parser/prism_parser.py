@@ -12,7 +12,7 @@ import paynt.model.model_builder
 
 import os
 import re
-import uuid
+import tempfile
 
 import logging
 
@@ -114,19 +114,14 @@ class PrismParser:
             sketch_output.append(f"const {parameter_type} {parameter_name}_MIN;\n")
             sketch_output.append(f"const {parameter_type} {parameter_name}_MAX;\n")
 
-        # store modified sketch to a temporary file
-        tmp_path = sketch_path + str(uuid.uuid4())
-        with open(tmp_path, "w") as f:
-            for line in sketch_output:
-                print(line, end="", file=f)
-
-        # try to parse temporary sketch and then delete it
-        try:
-            prism = stormpy.parse_prism_program(tmp_path, prism_compatibility=True)
-            os.remove(tmp_path)
-        except Exception as e:
-            os.remove(tmp_path)
-            raise SyntaxError from e
+        with tempfile.TemporaryDirectory() as directory:
+            tmp_path = os.path.join(directory, os.path.basename(sketch_path))
+            with open(tmp_path, "w") as f:
+                f.writelines(sketch_output)
+            try:
+                prism = stormpy.parse_prism_program(tmp_path, prism_compatibility=True)
+            except Exception as e:
+                raise SyntaxError from e
 
         return prism, parameter_definitions
 

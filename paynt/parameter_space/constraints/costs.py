@@ -36,7 +36,8 @@ class CostsConstraint(Constraint):
                 assert line_parameter == parameter_name, f"sketch.costs line {line_index}: expected parameter {parameter_name!r}, got {line_parameter!r}"
                 assert int(line_option) == option, f"sketch.costs line {line_index}: expected option {option}, got {line_option}"
 
-                cost_var = z3.Int(f"__cost_{parameter_name}_{option}")
+                # by index: parameters may share a name
+                cost_var = z3.Int(f"__cost_{parameter}_{option}", ctx=ctx.z3_context)
                 cost_vars.append(cost_var)
                 cost_assertions.append(z3.If(ctx.eq(parameter, option), cost_var == int(cost_value), cost_var == 0))
 

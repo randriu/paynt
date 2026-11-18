@@ -40,16 +40,40 @@ class PolicyTreeSynthesizer(paynt.synthesizer.synthesizer.Synthesizer):
 
     def __init__(self, colored_mdp: paynt.colored_mdp.ColoredMdp, task: paynt.task.SynthesisTask):
         paynt.utils.error_handling.require_pair_list_coloring(colored_mdp.coloring, "the policy tree")
+        alternative = "use --method onebyone or smpmc for a member and a policy, or --method smpmc --constraint exists_forall for one policy for every member"
+        paynt.utils.error_handling.require_probability_properties(
+            task.specification, "the policy tree (an MDP family with --method ar, cegis or hybrid)", alternative
+        )
+        paynt.utils.error_handling.require_no_step_bounds(
+            task.specification,
+            "the policy tree (an MDP family with --method ar, cegis or hybrid)",
+            "it solves a game about reaching a target and takes its policies from Storm's schedulers, and "
+            + paynt.utils.error_handling.NO_SCHEDULER_FOR_STEP_BOUNDS,
+            alternative,
+        )
         super().__init__(colored_mdp, task)
 
     @property
     def method_name(self) -> str:
         return "AR (policy tree)"
 
-    def verify_policy(self, selected_choices: Any, prop: paynt.specification.property.Property, policy: list[int | None]) -> bool:
-        """:param selected_choices: the compatible-choices bitmask to verify against -- callers outside this class have no PolicyTreeNode to read it from, so it
-        must be supplied explicitly (see ParameterSpaceEvaluation.selected_choices, captured at decision time)"""
-        _, mdp = paynt.mdp_family._utils.fix_and_apply_policy_to_parameter_space(self.colored_mdp, selected_choices, policy)
+    def verify_policy(
+        self,
+        parameter_space: paynt.parameter_space.parameter_space.ParameterSpace,
+        selected_choices: Any,
+        prop: paynt.specification.property.Property,
+        policy: list[int | None],
+    ) -> bool:
+        """Whether the policy satisfies prop in every member of parameter_space, and offers each of them its action wherever it goes.
+
+        Checked on the members' choices combined, so True holds for every member, but False can also mean only that a mix of them fails.
+
+        :param selected_choices: the compatible-choices bitmask to verify against -- callers outside this class have no PolicyTreeNode to read it from, so it
+            must be supplied explicitly (see ParameterSpaceEvaluation.selected_choices, captured at decision time)
+        """
+        (policy_fixed, _), mdp = paynt.mdp_family._utils.fix_and_apply_policy_to_parameter_space(self.colored_mdp, selected_choices, policy)
+        if paynt.mdp_family._utils.policy_gets_stuck(self.colored_mdp, parameter_space, mdp, policy_fixed):
+            return False
         policy_result = mdp.model_check_property(prop, alt=True)
         assert self.stat is not None
         self.stat.iteration(mdp)
@@ -74,12 +98,13 @@ class PolicyTreeSynthesizer(paynt.synthesizer.synthesizer.Synthesizer):
         assert node.mdp is not None
         assert self.stat is not None
 
-        game_solver.solve_sg(node.selected_choices)
+        game_solver.solve_sg(node.selected_choices, paynt.mdp_family._utils.stuck_choices(self.colored_mdp, node.parameter_space))
         # game_solver.solve_smg(node.selected_choices)
 
         game_value = game_solver.solution_value
         self.stat.iteration_game(node.mdp.states)
-        game_sat = prop.satisfies_threshold_within_precision(game_value)
+        # a game cut off before it converged decides nothing, but its policy still guides the splitting
+        game_sat = game_solver.solution_converged and prop.satisfies_threshold_within_precision(game_value)
         # logger.debug("game solved, value is {}".format(game_value))
         game_policy = game_solver.solution_state_to_player1_action
         # fix irrelevant choices
@@ -90,6 +115,24 @@ class PolicyTreeSynthesizer(paynt.synthesizer.synthesizer.Synthesizer):
                 game_policy_fixed[state] = action
         game_policy = game_policy_fixed
         return game_policy, game_sat
+
+    def policy_holds_for_every_member(self, node: PolicyTreeNode, policy: list[int | None], prop: paynt.specification.property.Property) -> bool:
+        """Whether the policy of the game abstraction satisfies prop in every member of the node: it does in the node's MDP with the policy applied, at its
+        worst, and it offers every member its action wherever it goes.
+
+        The game's value alone does not tell: its solution (policy iteration) can miss a loop in which Player 2 keeps the target away for ever, which gives a
+        policy, or a value, that does not hold. And a member can get stuck at a value that satisfies the threshold (as P<=1 does).
+        """
+        try:
+            (policy_fixed, _), mdp = paynt.mdp_family._utils.fix_and_apply_policy_to_parameter_space(self.colored_mdp, node.selected_choices, policy)
+        except paynt.utils.error_handling.StateWithoutChoice:
+            # an action of the policy that no member offers
+            return False
+        if paynt.mdp_family._utils.policy_gets_stuck(self.colored_mdp, node.parameter_space, mdp, policy_fixed):
+            return False
+        assert self.stat is not None
+        self.stat.iteration(mdp)
+        return mdp.model_check_property(prop, alt=True).sat
 
     def state_to_choice_to_parameter_selection(self, state_to_choice: list[int | None]) -> tuple[Any, list[list[int]]]:
         if self.task.discard_unreachable_choices:
@@ -123,7 +166,7 @@ class PolicyTreeSynthesizer(paynt.synthesizer.synthesizer.Synthesizer):
             game_sat = False
 
         mdp_family_result.game_policy = game_policy
-        if game_sat:
+        if game_sat and self.policy_holds_for_every_member(node, game_policy, prop):
             mdp_family_result.policy = game_policy
             return mdp_family_result
 

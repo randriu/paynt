@@ -4,6 +4,9 @@ from typing import Any
 
 import stormpy
 import payntbind
+
+import paynt.utils.error_handling
+import fractions
 import math
 import operator
 
@@ -156,7 +159,8 @@ class Property:
             self.threshold = rf.threshold_expr.evaluate_as_rational()
             self.threshold_plus_precision = self.threshold
         else:
-            self.threshold = rf.threshold_expr.evaluate_as_double()
+            # Storm's evaluate_as_double rounds toward zero (0.2 becomes 0.19999999999999998), Python rounds a fraction to the nearest double
+            self.threshold = float(fractions.Fraction(str(rf.threshold_expr.evaluate_as_rational())))
             if self.minimizing:
                 self.threshold_plus_precision = self.threshold + Property.model_checking_precision
             else:
@@ -220,16 +224,49 @@ class Property:
         return self.formula.subformula.is_until_formula
 
     @property
+    def is_step_bounded(self) -> bool:
+        """Whether the property looks a bounded number of steps ahead: a step-bounded until or eventually (F<=k, U<=k, F[a,b]), next (X), or a cumulative (C<=k)
+        or instantaneous (I=k) reward.
+
+        Storm gives no scheduler for such a property on an MDP: the best policy depends on the step.
+        """
+        path_formula = self.formula.subformula
+        bounded_kinds = (
+            stormpy.logic.BoundedUntilFormula,
+            stormpy.logic.CumulativeRewardFormula,
+            stormpy.logic.DiscountedCumulativeRewardFormula,
+            stormpy.logic.InstantaneousRewardFormula,
+        )
+        # stormpy has no class for a next formula, which Storm prints as "X <formula>"
+        return isinstance(path_formula, bounded_kinds) or str(path_formula).startswith("X ")
+
+    @property
     def has_game_formula(self) -> bool:
         return self.game_formula is not None
 
-    def transform_until_to_eventually(self) -> None:
-        if not self.is_until:
+    def transform_until_to_eventually(self, model: Any) -> None:
+        """Check an until formula `phi1 U phi2` as `F phi2` if the model gives both the same paths (see ModelIndex.until_is_eventually): more of PAYNT supports
+        a target to reach.
+
+        Otherwise the until formula stays, which only model checking supports.
+        """
+        if not self._until_is_eventually(model):
             return
-        logger.info("converting until formula to eventually...")
         formula = payntbind.synthesis.transform_until_to_eventually(self.property.get_raw_formula())
         prop = stormpy.logic.Property("", formula, set())
         self.__init__(prop, self.use_exact)  # type: ignore[misc]
+
+    def _until_is_eventually(self, model: Any) -> bool:
+        # local: paynt.model.model imports this module
+        from paynt.model.model import ModelIndex
+
+        if not self.is_until:
+            return False
+        if not ModelIndex.until_is_eventually(model, self.formula.subformula):
+            logger.info(f"checking {self} as it is: a state where neither side holds can reach the right side")
+            return False
+        logger.info(f"checking {self} as reaching its right side: no state where neither side holds can")
+        return True
 
     def property_copy(self) -> Any:
         return stormpy.logic.Property("", self.property.get_raw_formula().clone(), set())
@@ -240,7 +277,16 @@ class Property:
         return new_property
 
     def result_valid(self, value: Any) -> bool:
+        """Whether the value of a single design is valid: an infinite reward means the design does not surely reach the target."""
         return not self.reward or value != math.inf
+
+    def best_case_is_unknown(self, value: Any) -> bool:
+        """Whether value, the best case of this property over several designs, says nothing about them.
+
+        The best case of a maximizing reward is a maximum, which is infinite as soon as one scheduler of the MDP fails to surely reach the target, even if every
+        design reaches it. A minimum is infinite only if every design is: that best case is a valid verdict.
+        """
+        return self.reward and self.maximizing and value == math.inf
 
     def satisfies_threshold(self, value: Any) -> bool:
         return self.result_valid(value) and self.op(value, self.threshold)
@@ -266,6 +312,7 @@ class Property:
         return negated_property
 
     def get_target_label(self) -> str:
+        paynt.utils.error_handling.require_eventually(self)
         target = self.formula.subformula.subformula
         if isinstance(target, stormpy.logic.AtomicLabelFormula):
             target_label = target.label
@@ -377,10 +424,9 @@ class OptimalityProperty(Property):
             return self.optimum * (1 + self.model_checking_precision)
         return self.optimum * (1 - self.model_checking_precision)
 
-    def transform_until_to_eventually(self) -> None:
-        if not self.is_until:
+    def transform_until_to_eventually(self, model: Any) -> None:
+        if not self._until_is_eventually(model):
             return
-        logger.info("converting until formula to eventually...")
         formula = payntbind.synthesis.transform_until_to_eventually(self.property.get_raw_formula())
         prop = stormpy.logic.Property("", formula, set())
         self.__init__(prop, self.epsilon, self.use_exact)  # type: ignore[misc]
@@ -464,9 +510,9 @@ class Specification:
     def contains_until_properties(self) -> bool:
         return any(p.is_until for p in self.all_properties())
 
-    def transform_until_to_eventually(self) -> None:
+    def transform_until_to_eventually(self, model: Any) -> None:
         for p in self.all_properties():
-            p.transform_until_to_eventually()
+            p.transform_until_to_eventually(model)
 
     def check(self) -> None:
         # TODO

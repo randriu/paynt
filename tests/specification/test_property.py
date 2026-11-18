@@ -59,16 +59,11 @@ class TestSpecificationRewrap:
 
 
 class TestThreshold:
-    @pytest.mark.parametrize("threshold", ["0.25", "0.3"])
+    # Storm alone makes 0.2 the double 0.19999999999999998, so a design whose probability is 0.2 would violate P<=0.2
+    @pytest.mark.parametrize("threshold", ["0.25", "0.3", "0.2", "0.1", "-0.1", "1e-3"])
     def test_is_the_double_nearest_to_the_written_number(self, threshold):
         prop = paynt.specification.property.Property(stormpy.parse_properties(f'P<={threshold} [F "goal"]')[0])
         assert prop.threshold == float(threshold)
-
-    @pytest.mark.xfail(strict=True, reason="Storm rounds the rational 1/5 toward zero when it makes it a double: 0.19999999999999998")
-    def test_is_the_double_nearest_to_a_number_that_rounds_up(self):
-        """A design whose probability is 0.2 then violates `P<=0.2` and satisfies `P>0.2`."""
-        prop = paynt.specification.property.Property(stormpy.parse_properties('P<=0.2 [F "goal"]')[0])
-        assert prop.threshold == 0.2
 
 
 WALK = """dtmc
@@ -115,3 +110,54 @@ class TestHelpers:
     def test_only_a_game_property_has_a_game_formula(self, posmg_test_game, smpmc_tiny):
         assert posmg_test_game.task.get_property().has_game_formula
         assert not smpmc_tiny.task.get_property().has_game_formula
+
+
+class TestUntil:
+    """models/tests/edge-cases/until.templ: H=0 reaches the goal only through the bad state, so `!"bad" U "goal"` and `F "goal"` differ there."""
+
+    @staticmethod
+    def specification(tmp_path, *properties):
+        import paynt.parser.sketch
+        from tests.helpers.models import get_sketch_paths
+
+        props_path = tmp_path / "case.props"
+        props_path.write_text("\n".join(properties) + "\n")
+        _factory, task = paynt.parser.sketch.Sketch.load_sketch(get_sketch_paths("tests/edge-cases", "until.templ")[0], str(props_path))
+        return task.specification
+
+    def test_is_checked_as_reaching_the_goal_when_storm_makes_the_bad_state_absorbing(self, tmp_path):
+        """Storm does for a model built for this formula alone, with atomic sides."""
+        [prop] = self.specification(tmp_path, 'Pmax=? ["ok" U "goal"]').all_properties()
+        assert str(prop.formula) == 'Pmax=? [F "goal"]'
+
+    @pytest.mark.parametrize(
+        "properties", [['Pmax=? [!"bad" U "goal"]'], ['P>=0.1 [F "goal"]', 'Pmax=? ["ok" U "goal"]']], ids=["a negated side", "with another property"]
+    )
+    def test_stays_when_the_bad_state_can_reach_the_goal(self, tmp_path, properties):
+        prop = self.specification(tmp_path, *properties).all_properties()[-1]
+        assert prop.is_until
+
+    def test_what_needs_a_target_refuses_it(self, tmp_path):
+        prop = self.specification(tmp_path, 'Pmax=? [!"bad" U "goal"]').all_properties()[0]
+        with pytest.raises(NotImplementedError, match="is checked as an until formula"):
+            prop.get_target_label()
+
+
+@pytest.mark.parametrize(
+    "text, bounded",
+    [
+        ('P>=0.5 [F<=2 "goal"]', True),
+        ('P>=0.5 ["ok" U<=2 "goal"]', True),
+        ('P>=0.5 [F[1,2] "goal"]', True),
+        ('P>=0.5 [X "goal"]', True),
+        ('R{"steps"}<=1 [C<=2]', True),
+        ('R{"steps"}<=1 [I=2]', True),
+        ('P>=0.5 [F "goal"]', False),
+        ('P>=0.5 ["ok" U "goal"]', False),
+        ('R{"steps"}<=1 [F "goal"]', False),
+        ('R{"steps"}<=1 [C]', False),
+    ],
+)
+def test_a_property_is_step_bounded(text, bounded):
+    prop = paynt.specification.property.Property(stormpy.parse_properties(text)[0])
+    assert prop.is_step_bounded == bounded

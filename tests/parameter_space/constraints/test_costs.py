@@ -14,6 +14,13 @@ listed here costs more than 55; every cheaper combination does not satisfy the p
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+import z3
+
+import paynt.parameter_space.constraints
+import paynt.parameter_space.parameter_space
+import paynt.parameter_space.smt
 import paynt.synthesizer.smpmc
 import paynt.synthesizer.synthesizer
 
@@ -58,3 +65,20 @@ class TestCostsConstraintOnCegis:
     def test_agrees_with_smpmc_below_the_boundary(self, smpmc_tiny):
         result = _run(smpmc_tiny.factory.build(), smpmc_tiny.task, threshold=24, method="cegis")
         assert not result.success
+
+
+def test_parameters_with_the_same_name_have_costs_of_their_own(tmp_path):
+    """Two parameters h, option 1 costs 5: at most 5 allows option 1 for one of them."""
+    space = paynt.parameter_space.parameter_space.ParameterSpace()
+    for _ in range(2):
+        space.add_parameter("h", ["0", "1"])
+    (tmp_path / "sketch.costs").write_text("h 0 0\nh 1 5\nh 0 0\nh 1 5\n")
+    task = SimpleNamespace(costs_file_path=str(tmp_path / "sketch.costs"), costs_threshold=5)
+    solver = paynt.parameter_space.smt.SmtSolver(space, paynt.parameter_space.constraints.build_constraint("costs"), colored_mdp="unused", task=task)
+    encoding = paynt.parameter_space.smt.ParameterSpaceEncoding(solver, space)
+    allowed = set()
+    while (assignment := encoding.pick_assignment()) is not None:
+        options = tuple(assignment.parameter_options(parameter)[0] for parameter in range(2))
+        allowed.add(options)
+        solver.solver.add(z3.Not(z3.And([solver.solver_clauses[parameter][option] for parameter, option in enumerate(options)])))
+    assert allowed == {(0, 0), (0, 1), (1, 0)}

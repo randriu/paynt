@@ -44,10 +44,12 @@ class ProbGoalConstraint(Constraint):
         num_states = transition_matrix.nr_columns
         # reach[s]: the target is reached from s with positive probability under some (prob0) / every (prob1) resolution of the nondeterminism;
         # rank[s] decreases along the path that witnesses it, so that a cycle cannot witness itself
-        reach = [z3.Bool(f"__prob_goal_reach_{state}") for state in range(num_states)]
-        rank = [z3.Int(f"__prob_goal_rank_{state}") for state in range(num_states)]
+        # the lists given to And/Or below may be empty, which Z3 would build in its global context without z3_context
+        z3_context = ctx.z3_context
+        reach = [z3.Bool(f"__prob_goal_reach_{state}", ctx=z3_context) for state in range(num_states)]
+        rank = [z3.Int(f"__prob_goal_rank_{state}", ctx=z3_context) for state in range(num_states)]
         # visited[s] (prob1): s can be visited before the target is reached
-        visited = [z3.Bool(f"__prob_goal_visited_{state}") for state in range(num_states)]
+        visited = [z3.Bool(f"__prob_goal_visited_{state}", ctx=z3_context) for state in range(num_states)]
 
         assertions: list[Any] = [state_rank >= 0 for state_rank in rank]
         for state in range(num_states):
@@ -57,18 +59,18 @@ class ProbGoalConstraint(Constraint):
 
             per_choice_progress = []
             for choice in transition_matrix.get_rows_for_group(state):
-                enabled = z3.And([ctx.eq(parameter, option) for parameter, option in choice_to_assignment[choice]])
+                enabled = z3.And([ctx.eq(parameter, option) for parameter, option in choice_to_assignment[choice]], z3_context)
                 successors = [entry.column for entry in transition_matrix.get_row(choice) if entry.value != 0 and entry.column != state]
-                progress = z3.Or([z3.And(reach[successor], rank[successor] < rank[state]) for successor in successors])
+                progress = z3.Or([z3.And(reach[successor], rank[successor] < rank[state]) for successor in successors], z3_context)
                 if self.prob == 0:
                     per_choice_progress.append(z3.And(enabled, progress))
                 else:
                     per_choice_progress.append(z3.Implies(enabled, progress))
-                    assertions.append(z3.Implies(z3.And(visited[state], enabled), z3.And([visited[successor] for successor in successors])))
+                    assertions.append(z3.Implies(z3.And(visited[state], enabled), z3.And([visited[successor] for successor in successors], z3_context)))
             if self.prob == 0:
-                assertions.append(z3.Implies(reach[state], z3.Or(per_choice_progress)))
+                assertions.append(z3.Implies(reach[state], z3.Or(per_choice_progress, z3_context)))
             else:
-                assertions.append(z3.Implies(reach[state], z3.And(per_choice_progress)))
+                assertions.append(z3.Implies(reach[state], z3.And(per_choice_progress, z3_context)))
                 # probability 1: no state from which the target may be missed can be visited
                 assertions.append(z3.Implies(visited[state], reach[state]))
 

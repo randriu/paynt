@@ -1,4 +1,4 @@
-"""paynt.utils.error_handling: the errors for a state that a coloring leaves without a choice, for what an incomplete coloring does not support, for a general
+"""paynt.utils.error_handling: the designs that leave a state without a choice, the errors for what an incomplete coloring does not support, for a general
 coloring where the (parameter, option) pairs are needed, and for a method that a feature does not run.
 
 The functions that read a few attributes of the colored MDP, the model and the specification are exercised on stand-ins; the same errors are reached through the
@@ -20,59 +20,74 @@ from tests.helpers.models import general_colored_mdp, load_colored_mdp
 CHOICE_GROUPS = [0, 1, 3, 4, 5]
 CHOICE_DESTINATIONS = [[1], [2], [3], [3], [3]]
 
-STORM_DEADLOCK = "Expected that in each state, at least one action is selected. Got a deadlock state"
-
 
 def colored_mdp(choice_destinations=None, initial_states=(0,)):
-    underlying_mdp = SimpleNamespace(nondeterministic_choice_indices=CHOICE_GROUPS, initial_states=list(initial_states))
+    underlying_mdp = SimpleNamespace(
+        nondeterministic_choice_indices=CHOICE_GROUPS, initial_states=list(initial_states), nr_choices=5, has_state_valuations=lambda: False
+    )
     return SimpleNamespace(underlying_mdp=underlying_mdp, choice_destinations=choice_destinations or CHOICE_DESTINATIONS)
 
 
-class TestExplainStateWithoutChoice:
+class Space:
+    def __init__(self, size=1):
+        self.size = size
+
+    def __str__(self):
+        return "H=1" if self.size == 1 else "H:{1,2}"
+
+
+class TestRaiseDeadlockedDesign:
     def test_a_block_that_succeeds_is_left_alone(self):
-        with error_handling.explain_state_without_choice(colored_mdp(), [True] * 5, "space"):
-            built = "the sub-MDP"
-        assert built == "the sub-MDP"
+        with error_handling.raise_deadlocked_design(colored_mdp(), [True] * 5, Space()):
+            built = "the model"
+        assert built == "the model"
 
-    def test_names_the_reachable_state_left_without_a_choice(self):
+    def test_names_the_state_left_without_a_choice_and_the_way_to_it(self):
         # state 1 is reached through choice 0 and has both of its choices disabled
-        choices = [True, False, False, True, True]
-        with pytest.raises(ValueError, match=r"the coloring enables no choice in state 1, which is reachable, for the parameter space some space") as raised:
-            with error_handling.explain_state_without_choice(colored_mdp(), choices, "some space"):
-                raise RuntimeError(STORM_DEADLOCK)
-        assert "ColoringBuilder.check_definition(..., complete=False)" in str(raised.value)
+        with pytest.raises(error_handling.DeadlockedDesigns, match=r"^skipping design H=1: state 1 is reachable and keeps no choice$") as raised:
+            with error_handling.raise_deadlocked_design(colored_mdp(), [True, False, False, True, True], Space()):
+                raise error_handling.StateWithoutChoice()
+        assert (raised.value.state, raised.value.states) == (1, [0, 1])
 
-    def test_finds_a_state_that_is_reached_only_through_others(self):
+    def test_the_way_is_a_shortest_one(self):
         # state 3 is reached through state 1's second choice, and its choice is disabled
-        choices = [True, False, True, True, False]
-        with pytest.raises(ValueError, match="in state 3,"):
-            with error_handling.explain_state_without_choice(colored_mdp(), choices, "space"):
-                raise RuntimeError(STORM_DEADLOCK)
+        with pytest.raises(error_handling.DeadlockedDesigns) as raised:
+            with error_handling.raise_deadlocked_design(colored_mdp(), [True, False, True, True, False], Space()):
+                raise error_handling.StateWithoutChoice()
+        assert raised.value.states == [0, 1, 3]
 
-    def test_hides_the_error_of_storm(self):
-        with pytest.raises(ValueError) as raised:
-            with error_handling.explain_state_without_choice(colored_mdp(), [True, False, False, True, True], "space"):
-                raise RuntimeError(STORM_DEADLOCK)
+    def test_hides_the_signal_of_the_builder(self):
+        with pytest.raises(error_handling.DeadlockedDesigns) as raised:
+            with error_handling.raise_deadlocked_design(colored_mdp(), [True, False, False, True, True], Space()):
+                raise error_handling.StateWithoutChoice()
         assert raised.value.__cause__ is None
         assert raised.value.__suppress_context__
 
-    def test_a_deadlock_in_a_state_that_is_not_reachable_is_reported_as_it_is(self):
-        # choice 0 leads nowhere, so states 1 to 3 are not reached, and their choices being disabled is no fault of the coloring
-        destinations = [[], [2], [3], [3], [3]]
-        choices = [True, False, False, False, False]
-        with pytest.raises(RuntimeError, match="deadlock"):
-            with error_handling.explain_state_without_choice(colored_mdp(destinations), choices, "space"):
-                raise RuntimeError(STORM_DEADLOCK)
-
     def test_any_other_failure_is_reported_as_it_is(self):
         with pytest.raises(RuntimeError, match="out of memory"):
-            with error_handling.explain_state_without_choice(colored_mdp(), [True, False, False, True, True], "space"):
+            with error_handling.raise_deadlocked_design(colored_mdp(), [True, False, False, True, True], Space()):
                 raise RuntimeError("out of memory")
 
-    def test_only_failures_of_the_kind_storm_raises_are_looked_at(self):
-        with pytest.raises(KeyError):
-            with error_handling.explain_state_without_choice(colored_mdp(), [True, False, False, True, True], "space"):
-                raise KeyError("deadlock")
+
+class TestChoicesAvoidingDeadlocks:
+    def test_drops_the_choices_into_a_state_without_one(self):
+        # state 2 keeps no choice: state 1 goes to state 3 instead
+        choices, reached = error_handling.choices_avoiding_deadlocks(colored_mdp(), [True, True, True, False, True], Space(2))
+        assert list(choices) == [0, 2, 4]
+        # which of them are kept depends on the choices of every state reached, state 2 included
+        assert reached == [0, 1, 2, 3]
+
+    def test_every_design_is_skipped_when_the_initial_state_keeps_no_choice(self):
+        # state 2 keeps no choice, and state 1 only the one into it
+        with pytest.raises(error_handling.DeadlockedDesigns, match=r"^skipping the 2 designs of H:\{1,2\}: state 2 is reachable") as raised:
+            error_handling.choices_avoiding_deadlocks(colored_mdp(), [True, True, False, False, True], Space(2))
+        # every state reached decides it
+        assert raised.value.states == [0, 1, 2]
+
+    def test_a_single_design_is_skipped(self):
+        with pytest.raises(error_handling.DeadlockedDesigns, match=r"^skipping design H=1: state 2 is reachable") as raised:
+            error_handling.choices_avoiding_deadlocks(colored_mdp(), [True, True, True, False, True], Space())
+        assert raised.value.states == [0, 1, 2]
 
 
 class TestRequireSingleProperty:

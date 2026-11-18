@@ -98,14 +98,6 @@ def setup_logger(log_path: str | None = None) -> list[logging.Handler]:
 )
 @click.option("--disable-expected-visits", is_flag=True, default=False, panel="Synthesis", help="do not compute expected visits for the splitting heuristic")
 @click.option(
-    "--ce-generator",
-    type=click.Choice(["dtmc", "mdp"]),
-    default="dtmc",
-    show_default=True,
-    panel="Synthesis",
-    help="counterexample generator",
-)
-@click.option(
     "--constraint",
     type=click.Choice(["exists", "exists_forall", "costs", "prob0", "prob1"]),
     default=None,
@@ -174,7 +166,6 @@ def paynt_run(
     dtnest: bool,
     dtnest_subtree_depth: int,
     dtnest_error_threshold: float,
-    ce_generator: str,
     constraint: str | None,
     costs_threshold: int | None,
     smpmc_forall: str | None,
@@ -198,7 +189,6 @@ def paynt_run(
     # they recognize (see paynt.task.SynthesisTask.from_specification and e.g. paynt.dt.task.DtTask).
     task_kwargs: dict[str, Any] = {
         "export_synthesis_filename_base": export_synthesis,
-        "conflict_generator_type": ce_generator,
         "disable_expected_visits": disable_expected_visits,
         "memory_size": fsc_memory_size,
         "posterior_aware": posterior_aware,

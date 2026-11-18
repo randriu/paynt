@@ -1,14 +1,17 @@
 """The errors for what a coloring, a specification, a sketch or a synthesis method cannot do, kept out of the classes that come across them so that those stay
-short: a state that a coloring leaves without a choice, what an incomplete coloring does not support (a full parameter assignment that leaves several choices
+short: designs that leave a state without a choice, what an incomplete coloring does not support (a full parameter assignment that leaves several choices
 enabled, see paynt.colored_mdp), a general coloring where the (parameter, option) pairs are needed, a hole where a sketch cannot have one (the reward of a
 state, a label), a specification that an engine does not support, and a method that a feature does not run."""
 
 from __future__ import annotations
 
+import collections
 import contextlib
 import json
 from collections.abc import Generator, Sequence
 from typing import TYPE_CHECKING, Any
+
+import stormpy
 
 import paynt.utils.coloring
 
@@ -19,46 +22,169 @@ if TYPE_CHECKING:
     import paynt.specification.property
 
 
+class StateWithoutChoice(RuntimeError):
+    """The choices from which a sub-MDP is built leave a state that they reach without a choice (see paynt.model.model.SubmodelBuilder.restrict)."""
+
+
+class DeadlockedDesigns(ValueError):
+    """Every design of a parameter space leaves a state that it reaches without a choice (a deadlock).
+
+    Such a design is skipped: an engine leaves it out, with a
+    warning, as if it were not in the parameter space.
+    """
+
+    def __init__(self, parameter_space: paynt.parameter_space.parameter_space.ParameterSpace, state: int, valuation: str, states: list[int]):
+        """:param state: a state of the underlying MDP that the designs reach and leave without a choice
+        :param valuation: its variables, as text
+        :param states: the states whose choices make it so: every design that selects the same choices there deadlocks too (see
+            ColoredMdp.relevant_parameters)
+        """
+        self.parameter_space = parameter_space
+        self.state = state
+        self.states = states
+        designs = f"design {parameter_space}" if parameter_space.size == 1 else f"the {parameter_space.size} designs of {parameter_space}"
+        where = f"state {state} ({valuation})" if valuation else f"state {state}"
+        super().__init__(f"skipping {designs}: {where} is reachable and keeps no choice")
+
+
 @contextlib.contextmanager
-def explain_state_without_choice(
+def raise_deadlocked_design(
     colored_mdp: paynt.colored_mdp.ColoredMdp, choices: Any, parameter_space: paynt.parameter_space.parameter_space.ParameterSpace
 ) -> Generator[None]:
-    """Build a sub-MDP of the colored MDP in the block; if that fails because a state is left without a choice, raise an error that says which state and what
-    the coloring did, instead of Storm's.
+    """Build the model of a design in the block; if a state it reaches keeps no choice, raise DeadlockedDesigns.
 
-    :param choices: the choices of the underlying MDP that the coloring enabled for parameter_space, from which the block builds
+    :param choices: the choices of the underlying MDP that the coloring enabled for parameter_space (one design), from which the block builds
     """
     try:
         yield
-    except RuntimeError as error:
-        raise _state_without_choice(error, colored_mdp, choices, parameter_space) from None
+    except StateWithoutChoice:
+        raise _deadlocked_design(colored_mdp, choices, parameter_space) from None
 
 
-def _state_without_choice(
-    error: RuntimeError, colored_mdp: paynt.colored_mdp.ColoredMdp, choices: Any, parameter_space: paynt.parameter_space.parameter_space.ParameterSpace
-) -> Exception:
-    """The error to raise for a failure to build the sub-MDP of choices: if Storm found a state without a choice, and it is a reachable one, an error that says
-    which state; otherwise the original."""
-    if "deadlock" not in str(error):
-        return error
+def choices_avoiding_deadlocks(
+    colored_mdp: paynt.colored_mdp.ColoredMdp, choices: Any, parameter_space: paynt.parameter_space.parameter_space.ParameterSpace
+) -> tuple[Any, list[int]]:
+    """Of the choices of parameter_space, which leave a state they reach without a choice, those that keep away from such states.
+
+    A design that keeps a choice in every state it reaches takes only such choices, so the sub-MDP of these holds every design of parameter_space that is not
+    skipped.
+
+    :return: (1) those choices
+    :return: (2) the states that the choices of parameter_space reach, whose choices decide (1)
+    :raises DeadlockedDesigns: if parameter_space is a single design, or if no design keeps away from such states
+    """
+    deadlocked = _deadlocked_design(colored_mdp, choices, parameter_space)
+    if parameter_space.size == 1:
+        raise deadlocked
+    avoiding, reached = _choices_avoiding_states_without_choice(colored_mdp, choices)
+    if avoiding is None:
+        # every policy reaches such a state, so every design does: what decides it are the choices of the states reached
+        raise DeadlockedDesigns(parameter_space, deadlocked.state, _valuation(colored_mdp, deadlocked.state), reached)
+    return avoiding, reached
+
+
+def _deadlocked_design(
+    colored_mdp: paynt.colored_mdp.ColoredMdp, choices: Any, parameter_space: paynt.parameter_space.parameter_space.ParameterSpace
+) -> DeadlockedDesigns:
+    """DeadlockedDesigns for the choices of parameter_space, which leave a state they reach without a choice."""
+    path = _path_to_state_without_choice(colored_mdp, choices)
+    assert path is not None, "the choices leave no state they reach without a choice"
+    # a design that selects the same choices in the states on the path reaches the last one as well, and keeps no choice there either
+    return DeadlockedDesigns(parameter_space, path[-1], _valuation(colored_mdp, path[-1]), path)
+
+
+def _path_to_state_without_choice(colored_mdp: paynt.colored_mdp.ColoredMdp, choices: Any) -> list[int] | None:
+    """A shortest path from the initial state, through the choices, to a state that keeps none of them: its states, that one last.
+
+    None if every state that the choices reach keeps one.
+    """
     row_groups = colored_mdp.underlying_mdp.nondeterministic_choice_indices
-    reached = {int(state) for state in colored_mdp.underlying_mdp.initial_states}
-    frontier = list(reached)
-    while frontier:
-        state = frontier.pop()
+    predecessor: dict[int, int | None] = {int(state): None for state in colored_mdp.underlying_mdp.initial_states}
+    queue = collections.deque(predecessor)
+    while queue:
+        state = queue.popleft()
         enabled = [choice for choice in range(row_groups[state], row_groups[state + 1]) if choices[choice]]
         if not enabled:
-            return ValueError(
-                f"the coloring enables no choice in state {state}, which is reachable, for the parameter space {parameter_space}: every reachable "
-                "state must keep at least one choice. Restrict the options of the parameters that color its choices to those that leave one, and check a "
-                "hand-written coloring with ColoringBuilder.check_definition(..., complete=False)"
-            )
+            path = [state]
+            while (previous := predecessor[path[-1]]) is not None:
+                path.append(previous)
+            return path[::-1]
         for choice in enabled:
+            for destination in colored_mdp.choice_destinations[choice]:
+                if destination not in predecessor:
+                    predecessor[destination] = state
+                    queue.append(destination)
+    return None
+
+
+def _choices_avoiding_states_without_choice(colored_mdp: paynt.colored_mdp.ColoredMdp, choices: Any) -> tuple[Any, list[int]]:
+    """The largest subset of the choices that never leads to a state without one of them: a policy that takes only these never reaches such a state, and one
+    that takes another one can. Only the states that the choices reach from the initial state count.
+
+    :return: (1) the subset, as a choice mask, or None if the initial state keeps none of it
+    :return: (2) the states that the choices reach
+    """
+    row_groups = colored_mdp.underlying_mdp.nondeterministic_choice_indices
+    enabled: dict[int, list[int]] = {}
+    queue = collections.deque(int(state) for state in colored_mdp.underlying_mdp.initial_states)
+    reached = set(queue)
+    while queue:
+        state = queue.popleft()
+        enabled[state] = [choice for choice in range(row_groups[state], row_groups[state + 1]) if choices[choice]]
+        for choice in enabled[state]:
             for destination in colored_mdp.choice_destinations[choice]:
                 if destination not in reached:
                     reached.add(destination)
-                    frontier.append(destination)
-    return error
+                    queue.append(destination)
+
+    # remove the choices into a state without one until none is left
+    source = {choice: state for state, state_choices in enabled.items() for choice in state_choices}
+    into: dict[int, list[int]] = collections.defaultdict(list)
+    for choice in source:
+        for destination in colored_mdp.choice_destinations[choice]:
+            into[destination].append(choice)
+    kept = {state: len(state_choices) for state, state_choices in enabled.items()}
+    removed: set[int] = set()
+    stuck = [state for state, count in kept.items() if count == 0]
+    while stuck:
+        for choice in into[stuck.pop()]:
+            if choice in removed:
+                continue
+            removed.add(choice)
+            kept[source[choice]] -= 1
+            if kept[source[choice]] == 0:
+                stuck.append(source[choice])
+
+    if any(kept[int(state)] == 0 for state in colored_mdp.underlying_mdp.initial_states):
+        return None, sorted(reached)
+    avoiding = stormpy.datastructures.BitVector(colored_mdp.underlying_mdp.nr_choices, False)
+    for choice in source:
+        if choice not in removed:
+            avoiding.set(choice, True)
+    return avoiding, sorted(reached)
+
+
+def _valuation(colored_mdp: paynt.colored_mdp.ColoredMdp, state: int) -> str:
+    """The variables of a state of the underlying MDP, as text; empty without state valuations."""
+    model = colored_mdp.underlying_mdp
+    if not model.has_state_valuations():
+        return ""
+    valuation = json.loads(str(model.state_valuations.to_json(state)))
+    return ", ".join(f"{variable}={value}" for variable, value in valuation.items() if "_loc_prism2jani_" not in variable)
+
+
+def require_eventually(prop: paynt.specification.property.Property) -> None:
+    """Raise NotImplementedError if prop is an until formula that is checked as it is, for code that needs a target to reach.
+
+    An until formula `phi1 U phi2` is checked as `F phi2` when no state where neither side holds can reach phi2 (see Property.transform_until_to_eventually);
+    otherwise only model checking supports it.
+    """
+    if prop.is_until:
+        raise NotImplementedError(
+            f"{prop} is checked as an until formula, which this needs as reaching a target: a state where neither side holds can reach the right side "
+            "(an until formula is read as reaching its right side when Storm makes such states absorbing, as it does for a model built for this formula alone "
+            "with atomic sides)"
+        )
 
 
 def require_single_property_on_nondeterministic_model(model: paynt.model.model.Mdp, specification: paynt.specification.property.Specification) -> None:
@@ -81,6 +207,29 @@ def require_no_maximizing_reward(specification: paynt.specification.property.Spe
     support."""
     if specification.contains_maximizing_reward_properties:
         raise NotImplementedError("CEGIS (also inside hybrid) does not support maximizing reward properties; use --method ar, onebyone or smpmc")
+
+
+#: the end of the reason why what needs Storm's scheduler of an MDP (AR and what is built on it) cannot handle a step-bounded property
+NO_SCHEDULER_FOR_STEP_BOUNDS = "Storm gives no scheduler for them, as the best policy depends on the step"
+
+
+def require_no_step_bounds(specification: paynt.specification.property.Specification, what: str, reason: str, alternative: str) -> None:
+    """Raise NotImplementedError if a property of the specification is step-bounded (see Property.is_step_bounded), which `what` does not support.
+
+    :param what: what does not support them, as a noun phrase, e.g. "AR (also inside hybrid)"
+    :param reason: why not
+    :param alternative: what to do instead
+    """
+    bounded = [str(prop).strip() for prop in specification.all_properties() if prop.is_step_bounded]
+    if bounded:
+        raise NotImplementedError(f"{what} does not support step-bounded properties such as {'; '.join(bounded)}: {reason}; {alternative}")
+
+
+def require_probability_properties(specification: paynt.specification.property.Specification, what: str, alternative: str) -> None:
+    """Raise NotImplementedError if the specification has a reward property, which `what` (a noun phrase) does not support."""
+    rewards = [str(prop).strip() for prop in specification.all_properties() if prop.reward]
+    if rewards:
+        raise NotImplementedError(f"{what} supports only probability properties, not {'; '.join(rewards)}; {alternative}")
 
 
 def require_single_property(specification: paynt.specification.property.Specification) -> None:

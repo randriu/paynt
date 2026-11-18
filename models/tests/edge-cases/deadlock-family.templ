@@ -1,0 +1,27 @@
+// With G=0 state 1 is reached with probability 1/2, and only H=0 has a command there: G=0 with H=1 or H=2 is skipped, whatever K. G=0, H=0 reaches the
+// goal with probability 1/2 at a cost of 2, and G=1 never reaches it, at a cost of 1. The designs with H=1 or H=2 that are not skipped are those with G=1,
+// and with G=0 none of them is. K colors only state 3, which is not on the way to state 1.
+dtmc
+
+hole int G in {0,1};
+hole int H in {0,1,2};
+hole int K in {0,1};
+
+module m
+    s : [0..3] init 0;
+    [go] s=0 & G=0 -> 1/2 : (s'=1) + 1/2 : (s'=3);
+    [stay] s=0 & G=1 -> (s'=3);
+    [win] s=1 & H=0 -> (s'=2);
+    [] s=2 -> true;
+    [] s=3 & K=0 -> true;
+    [] s=3 & K=1 -> true;
+endmodule
+
+label "goal" = s=2;
+label "done" = s>=2;
+
+rewards "cost"
+    [go] true : 1;
+    [stay] true : 1;
+    [win] true : 2;
+endrewards

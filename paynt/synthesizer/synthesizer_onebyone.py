@@ -5,6 +5,7 @@ from typing import Any
 import paynt.parameter_space.parameter_space
 import paynt.synthesizer.search_node
 import paynt.synthesizer.synthesizer
+import paynt.utils.error_handling
 
 import logging
 
@@ -23,7 +24,12 @@ class SynthesizerOneByOne(paynt.synthesizer.synthesizer.Synthesizer):
                 break
 
             assignment = node.parameter_space.construct_assignment(parameter_combination)
-            dtmc = self.colored_mdp.build_assignment(assignment)
+            try:
+                dtmc = self.colored_mdp.build_assignment(assignment)
+            except paynt.utils.error_handling.DeadlockedDesigns as error:
+                logger.warning(error)
+                self.explore(assignment)
+                continue
             assert self.stat is not None
             self.stat.iteration(dtmc)
             result = dtmc.check_specification(self.task.specification, short_evaluation=True)
@@ -43,27 +49,31 @@ class SynthesizerOneByOne(paynt.synthesizer.synthesizer.Synthesizer):
 
     def evaluate_all(self, parameter_space: paynt.parameter_space.parameter_space.ParameterSpace, prop: Any, keep_value_only: bool = False) -> list[Any]:
 
-        if not keep_value_only:
-            logger.debug("forcing keep_value_only=True for the one-by-one evaluation")
-            keep_value_only = True
-
         evaluations = []
         assert self.stat is not None
         for parameter_combination in parameter_space.all_combinations():
             if self.resource_limit_reached():
                 break
             assignment = parameter_space.construct_assignment(parameter_combination)
-            model = self.colored_mdp.build_assignment(assignment)
+            try:
+                model = self.colored_mdp.build_assignment(assignment)
+            except paynt.utils.error_handling.DeadlockedDesigns as error:
+                # not a design: it has no evaluation
+                logger.warning(error)
+                self.explore(assignment)
+                continue
             self.stat.iteration(model)
             result = model.model_check_property(prop)
             if keep_value_only:
                 evaluation: Any = result.value
             else:
+                # a member of a family is an MDP, so it comes with the policy that attains its value; a DTMC needs none
                 policy = None
-                if result.sat:
+                if result.sat and self.colored_mdp.feature_kind == "family":
                     from paynt.mdp_family import _utils as mdp_family_utils
 
-                    policy = mdp_family_utils.scheduler_to_policy(self.colored_mdp, result.result.get_scheduler(), model)
+                    actions = mdp_family_utils.scheduler_to_policy(self.colored_mdp, result.result.get_scheduler(), model)
+                    policy = (actions, [state for state, action in enumerate(actions) if action is not None])
                 evaluation = paynt.synthesizer.synthesizer.ParameterSpaceEvaluation(assignment, result.value, result.sat, policy)
             evaluations.append(evaluation)
             self.explore(assignment)
@@ -76,8 +86,10 @@ class SynthesizerOneByOne(paynt.synthesizer.synthesizer.Synthesizer):
         for evaluation in evaluations:
             parameter_space = evaluation.parameter_space
             policy = evaluation.policy
-            if policy is None:
+            if not evaluation.sat:
                 policy = "UNSAT"
+            elif policy is None:
+                policy = "SAT"
             else:
                 from paynt.mdp_family import _utils as mdp_family_utils
 

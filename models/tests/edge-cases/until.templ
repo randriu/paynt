@@ -1,0 +1,18 @@
+// With H=0 the goal is reached for sure, but through the bad state 1; with H=1 it is reached with probability 1/2, without it. So H=0 satisfies
+// !"bad" U "goal" (and "ok" U "goal") with probability 0 and F "goal" with 1, and H=1 both with 1/2.
+dtmc
+
+hole int H in {0,1};
+
+module m
+    s : [0..3] init 0;
+    [] s=0 & H=0 -> (s'=1);
+    [] s=0 & H=1 -> 1/2 : (s'=2) + 1/2 : (s'=3);
+    [] s=1 -> (s'=2);
+    [] s=2 -> true;
+    [] s=3 -> true;
+endmodule
+
+label "bad" = s=1;
+label "ok" = s!=1;
+label "goal" = s=2;

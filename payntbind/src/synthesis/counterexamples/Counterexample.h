@@ -6,6 +6,7 @@
 #include <storm/modelchecker/results/ExplicitQuantitativeCheckResult.h>
 #include <storm/modelchecker/results/ExplicitQualitativeCheckResult.h>
 
+#include <storm/environment/Environment.h>
 #include <storm/models/sparse/Dtmc.h>
 #include <storm/utility/Stopwatch.h>
 
@@ -54,15 +55,19 @@ namespace synthesis {
          * the given index.
          * @param formula_index Formula index.
          * @param formula_bound Formula threshold for CE construction.
+         * @param strict Whether the comparison with the threshold is strict (< or >): a value equal to it violates the formula.
          * @param mdp_bounds MDP model checking result in the primary direction (NULL if not used).
          * @param mdp_quotient_state_mdp A mapping of MDP states to the states of a quotient MDP.
+         * @param env The solver environment the sub-DTMCs are checked with.
          * @return A list of holes relevant in the CE.
          */
         std::vector<uint64_t> constructConflict(
             uint64_t formula_index,
             ValueType formula_bound,
+            bool strict,
             std::shared_ptr<storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType> const> mdp_bounds,
-            std::vector<StateType> const& mdp_quotient_state_map
+            std::vector<StateType> const& mdp_quotient_state_map,
+            storm::Environment const& env
             );
 
         /*!
@@ -106,15 +111,18 @@ namespace synthesis {
          * @param matrix_subdtmc Rerouting of the transition matrix wrt. unexpanded states.
          * @param reward_models_subdtmc Reward models for the initial sub-DTMC.
          * @param to_expand States expanded during this wave.
+         * @param env The solver environment.
          * @return true if the rerouting still satisfies the formula
          */
         bool expandAndCheck(
             uint64_t index,
             ValueType formula_bound,
+            bool strict,
             std::vector<std::vector<std::pair<StateType,ValueType>>> & matrix_subdtmc,
             storm::models::sparse::StateLabeling const& labeling_subdtmc,
             std::unordered_map<std::string,storm::models::sparse::StandardRewardModel<ValueType>> & reward_models_subdtmc,
-            std::vector<StateType> const& to_expand
+            std::vector<StateType> const& to_expand,
+            storm::Environment const& env
             );
 
         // Quotient MDP

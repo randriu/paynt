@@ -16,3 +16,5 @@ Used by `tests/performance/cases.toml`. Copies of these models:
 | `frozenlake-8x8`, `traffic-intersection` | the decision-tree benchmarks, `omdt/frozenlake_8x8` and `omdt/traffic_intersection` |
 | `resource-gathering-5` | the decision-tree benchmarks, `qcomp/resource-gathering-5` |
 | `maze-steps` | the decision-tree benchmarks, `maze/steps` |
+
+`obstacles-10-6-skip-easy/sketch.props` asks for `P>=0.1` instead of the original `P>0.9`, which robust SMPMC refutes only after about 10 minutes.

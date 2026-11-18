@@ -17,8 +17,6 @@ from paynt.dt.synthesizer_ar_dt import SynthesizerARDt
 
 from ._utils import DT_INNER_METHODS, make_inner_synthesizer, simplify_tree
 
-import payntbind
-
 import os
 import json
 
@@ -42,7 +40,7 @@ def _run_dt_map_scheduler(
 
     :param method: see DtSynthesizer; only "ar" maps a scheduler
     """
-    state_to_choice = payntbind.synthesis.schedulerToStateToGlobalChoice(
+    state_to_choice = paynt.model.model.ModelIndex.scheduler_choices(
         scheduler, cmdp_factory_dt.underlying_mdp, list(range(cmdp_factory_dt.underlying_mdp.nr_choices))
     )
     state_to_choice = paynt.model.model.ModelIndex.discard_unreachable_choices(
@@ -85,6 +83,13 @@ class DtSynthesizer:
         method: str = "ar",
     ):
         paynt.utils.error_handling.require_supported_method(method, DT_INNER_METHODS, "decision-tree synthesis")
+        if method == "ar":
+            paynt.utils.error_handling.require_no_step_bounds(
+                task.specification,
+                "decision-tree synthesis with --method ar",
+                "AR needs Storm's best scheduler of an MDP, and " + paynt.utils.error_handling.NO_SCHEDULER_FOR_STEP_BOUNDS,
+                "use --method smpmc",
+            )
         self.colored_mdp_factory = colored_mdp_factory
         self.task = task
         self.method = method

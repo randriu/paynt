@@ -128,7 +128,14 @@ class MdpSpecificationResult(SpecificationResult):
             results.append(self.optimality_result)
         return results
 
-    def evaluate(self, parameter_space: Any = None, admissible_assignment: Any = None) -> None:
+    def evaluate(self, admissible_assignment: Any = None, admissible_value: Any = None) -> None:
+        """Decide what the node holds.
+
+        :param admissible_assignment: a design of the node that satisfies the whole specification (with an objective, improves the optimum), if one was found;
+            when every design satisfies the constraints, it is the one to return, if one of them is not skipped (see
+            paynt.utils.error_handling.DeadlockedDesigns)
+        :param admissible_value: its value of the objective
+        """
         self.improving_assignment = None
         self.improving_value = None
         self.can_improve = None
@@ -141,24 +148,22 @@ class MdpSpecificationResult(SpecificationResult):
             self.can_improve = False
             return
 
-        if cr.sat is True:
-            # all constraints were satisfied
-            if opt is None:
-                if admissible_assignment is not None:
-                    self.improving_assignment = admissible_assignment
-                else:
-                    self.improving_assignment = parameter_space
+        if opt is None:
+            if admissible_assignment is not None:
+                # one admissible design is all a specification without an objective asks for
+                self.improving_assignment = admissible_assignment
                 self.can_improve = False
             else:
-                self.improving_assignment = opt.improving_assignment
-                self.improving_value = opt.improving_value
-                self.can_improve = opt.can_improve
+                # undecided; or every design satisfies every constraint, but the one tried is skipped
+                self.can_improve = True
             return
 
-        # constraints undecided
-        if opt is None:
-            self.can_improve = True
-        else:
+        if opt.improving_assignment is not None:
+            # the design of the best case satisfies the constraints: no design of the node does better
             self.improving_assignment = opt.improving_assignment
             self.improving_value = opt.improving_value
-            self.can_improve = opt.improving_value is None and opt.can_improve
+        elif admissible_assignment is not None:
+            # an admissible design improving the optimum, though better ones may remain
+            self.improving_assignment = admissible_assignment
+            self.improving_value = admissible_value
+        self.can_improve = opt.can_improve

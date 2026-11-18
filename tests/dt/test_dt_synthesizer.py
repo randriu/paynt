@@ -2,6 +2,7 @@ import pytest
 import stormpy
 
 import paynt.dt
+import paynt.dt.decision_tree
 
 from tests.helpers.models import get_sketch_paths, load_sketch
 from tests.helpers.reference import read_properties
@@ -35,7 +36,6 @@ class TestTwoConstraints:
         leaves = sorted(tree.action_labels[leaf.action] for leaf in tree.collect_terminals())
         assert leaves in (["fast", "medium"], ["__random__", "fast"])
 
-    @pytest.mark.xfail(strict=True, raises=AssertionError, reason="AR drops the root: the tree best for the energy alone drives slowly, which takes 6 hours")
     def test_the_least_energy_of_a_trip_of_4_hours_is_4(self):
         """optimality.props: at most 4 hours, the least energy, at depth 0."""
         factory, task = load_sketch("tests/time-energy", sketch_name="tree.templ", props_name="optimality.props")
@@ -68,20 +68,27 @@ class TestExportToPrism:
         tree_value, scheduler_value = tree_scheduler_value(tmp_path, "tests/dt-maze", depth=1)
         assert scheduler_value == pytest.approx(tree_value, rel=1e-4)
 
-    @pytest.mark.xfail(strict=True, raises=RuntimeError, reason="s takes the values 0 and 1, so it is written as a boolean: s, !(s)")
-    def test_an_integer_with_the_values_0_and_1_stays_an_integer(self, tmp_path):
-        """The trip of time-energy without the don't-care action: at depth 1, one stage fast and the other at medium speed take 3 hours."""
-        trip = {"sketch_name": "tree.templ", "props_name": "tree.props", "add_dont_care_action": False}
-        _tree_value, time = tree_scheduler_value(tmp_path, "tests/time-energy", depth=1, **trip)
-        assert time == pytest.approx(3)
+    def test_an_integer_with_the_values_0_and_1_stays_an_integer(self):
+        """The trip of time-energy at depth 1: s takes the values 0 and 1 in the states a tree decides."""
+        factory, task = load_sketch("tests/time-energy", sketch_name="tree.templ", props_name="tree.props", task_kwargs={"add_dont_care_action": False})
+        synthesizer = paynt.dt.DtSynthesizer(factory, task)
+        synthesizer.synthesize_tree(1)
+        guards = sorted(line.split("]")[1].split("->")[0].strip() for line in synthesizer.best_tree.to_prism().splitlines() if line.strip().startswith("["))
+        assert guards == ["s<=0", "s>0"]
 
 
-@pytest.mark.xfail(strict=True, raises=RuntimeError, reason="the choices of the states that no tree decides are dropped, so the initial state has none")
+@pytest.mark.parametrize(("domain", "is_bool"), [([False, True], True), ([0, 1], False), ([0, 1, 2], False)])
+def test_only_a_boolean_of_the_model_is_a_boolean_variable(domain, is_bool):
+    assert paynt.dt.decision_tree.DtVariable("v", domain).is_bool_var is is_bool
+
+
 def test_a_scheduler_from_a_file_is_mapped_to_a_tree(tmp_path):
-    """The optimal scheduler of dt-maze, written by Storm, given as --tree-map-scheduler."""
+    """The optimal scheduler of dt-maze, written by Storm, given as --tree-map-scheduler: a tree of depth 3 makes its choices, so it has its value."""
     factory, task = load_sketch("tests/dt-maze")
     mdp = factory.build().underlying_mdp
-    scheduler = stormpy.model_checking(mdp, task.get_property().formula, extract_scheduler=True).get_scheduler()
-    (tmp_path / "scheduler.json").write_text(scheduler.to_json_str(mdp))
-    factory, task = load_sketch("tests/dt-maze", task_kwargs={"scheduler_path": str(tmp_path / "scheduler.json")})
-    assert paynt.dt.DtSynthesizer(factory, task).run().success
+    result = stormpy.model_checking(mdp, task.get_property().formula, extract_scheduler=True)
+    (tmp_path / "scheduler.json").write_text(result.get_scheduler().to_json_str(mdp))
+    factory, task = load_sketch("tests/dt-maze", task_kwargs={"scheduler_path": str(tmp_path / "scheduler.json"), "tree_depth": 3})
+    mapped = paynt.dt.DtSynthesizer(factory, task).run()
+    assert mapped.success
+    assert mapped.value == pytest.approx(result.get_value(mdp.initial_states[0]))

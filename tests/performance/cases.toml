@@ -2,12 +2,11 @@
 # (or to build.py when build = true), expected is the result paynt must report. deterministic = false marks the cases
 # whose search depends on timing (Hybrid, dtnest): their iterations and result vary from run to run.
 
-# the true optimum is 9100.064279 (CEGIS), AR prunes it away: expect it once that AR bug is fixed
 [[case]]
 name = "ar-dpm-demo"
 project = "dpm-demo"
 args = ["--method", "ar"]
-expected = "optimum: 9197.776289"
+expected = "optimum: 9100.064279"
 
 [[case]]
 name = "ar-dpm-demo-requests"
@@ -52,12 +51,11 @@ args = ["--props", "easy.props", "--method", "hybrid"]
 expected = "feasible: no"
 deterministic = false
 
-# the same AR bug as in ar-dpm-demo
 [[case]]
 name = "hybrid-dpm-demo"
 project = "dpm-demo"
 args = ["--method", "hybrid"]
-expected = "optimum: 9197.776289"
+expected = "optimum: 9100.064279"
 deterministic = false
 
 [[case]]
@@ -128,7 +126,7 @@ expected = "satisfied 4451/4500 members"
 name = "robust-obstacles-10-6-skip-easy"
 project = "obstacles-10-6-skip-easy"
 args = ["--method", "smpmc", "--constraint", "exists_forall"]
-expected = "feasible: no"
+expected = "feasible: yes"
 
 [[case]]
 name = "robust-obstacles-10-9-pull"

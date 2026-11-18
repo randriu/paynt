@@ -23,14 +23,13 @@ def bitvec_width(parameter_space: paynt.parameter_space.parameter_space.Paramete
     return math.ceil(math.log2(max_options + 1)) + 1
 
 
-def parameter_bitvec_variables(
-    parameter_space: paynt.parameter_space.parameter_space.ParameterSpace,
-) -> tuple[list[Any], int, dict[str, int]]:
+def parameter_bitvec_variables(parameter_space: paynt.parameter_space.parameter_space.ParameterSpace, ctx: Any = None) -> tuple[list[Any], int, dict[str, int]]:
     """One z3.BitVec per parameter, of a shared width sized for the whole parameter_space.
 
     Each variable is named f"{parameter_name}#{index}", not the bare parameter name: parameter names are not guaranteed unique (POMDP/DT factories generate
     names from observation expressions), and Z3 interns BitVecs by name+sort, so two same-named parameters would otherwise silently become the same Z3 variable.
 
+    :param ctx: the Z3 context of the variables, Z3's global one when None
     :returns: (variables, width, name_to_parameter), where name_to_parameter maps each variable's str() back to its parameter index.
     """
     width = bitvec_width(parameter_space)
@@ -38,7 +37,7 @@ def parameter_bitvec_variables(
     name_to_parameter: dict[str, int] = {}
     for parameter in range(parameter_space.num_parameters):
         var_name = f"{parameter_space.parameter_name(parameter)}#{parameter}"
-        var = z3.BitVec(var_name, width)
+        var = z3.BitVec(var_name, width, ctx=ctx)
         variables.append(var)
         name_to_parameter[var_name] = parameter
     return variables, width, name_to_parameter

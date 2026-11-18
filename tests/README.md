@@ -28,11 +28,11 @@ The models in `models/tests`. "Designs" is the size of the parameter space.
 |---|---|---|---|---|---|
 | `smpmc-tiny` | DTMC sketch | 8 / 15 | 3 / 8 | `P>=0.1 [F "done"]`; `optimality.props`: `Pmax`; `sketch.costs` for the costs constraint | SMPMC, constraints, robust synthesis |
 | `generic-maze` | DTMC sketch | 183 / 257 | 24 / 9.4e6 | `R{"steps"}min` | model index, scoring, SMPMC theory (an ill-conditioned DTMC) |
-| `time-energy` | DTMC sketch; `tree.templ`: MDP | 3 / 7; 3 / 9 | 2 / 9; 1 / 5 (depth 0) | time and energy constraints: `sketch.props` feasible, `infeasible.props` not; `optimality.props`: least energy within 4 hours; `tree.props` for trees | multi-constraint splitting, a known AR bug |
-| `objective-optimum-violates-constraint` | DTMC sketch | 3 / 4 | 1 / 2 | `P>=0.9` and `R{"cost"}min` | known AR bug |
-| `max-reward-infinite-designs` | DTMC sketch | 4 / 5 | 1 / 2 | `R{"cost"}max`; `lower.props`: `R>=2.5` | known AR and SMPMC bug |
-| `constraint-decided-by-one-design` | DTMC sketch (`hybrid.templ`) | 4 / 8 | 1 / 3 | a probability and a cost constraint | known AR and hybrid bug |
-| `edge-cases` | DTMC sketches | 3 / 3-6 | 1-2 / 1-4 | none: the properties are in `soundness/test_engines.py` | thresholds equal to a value, goals reached at once or never, degenerate holes, a deadlock |
+| `time-energy` | DTMC sketch; `tree.templ`: MDP | 3 / 7; 3 / 9 | 2 / 9; 1 / 5 (depth 0) | time and energy constraints: `sketch.props` feasible, `infeasible.props` not; `optimality.props`: least energy within 4 hours; `tree.props` for trees | multi-constraint splitting, an objective with a constraint |
+| `objective-optimum-violates-constraint` | DTMC sketch | 3 / 4 | 1 / 2 | `P>=0.9` and `R{"cost"}min` | the design best for the objective violates the constraint |
+| `max-reward-infinite-designs` | DTMC sketch | 4 / 5 | 1 / 2 | `R{"cost"}max`; `lower.props`: `R>=2.5` | an infinite maximum over the designs |
+| `constraint-decided-by-one-design` | DTMC sketches | 3 / 5; 4 / 8 (`hybrid.templ`) | 1 / 3 | a probability and a cost constraint | a constraint satisfied by the best design, not by all |
+| `edge-cases` | DTMC sketches; `policy-tree-*.templ`, `step-bounded-family.templ`: MDP families | 3-5 / 3-19 | 1-3 / 1-12 | none: the properties are in `soundness/test_engines.py` and the tests that use them | thresholds equal to a value, goals reached at once or never, degenerate holes, designs that reach a state without a command (skipped), a policy stuck in one environment (robust synthesis), a zero-cost loop that misleads Storm's scheduler, until formulas that differ from reaching the goal, policy-tree merges and a game that cycles, step-bounded properties |
 | `prob-goal` | DTMC sketch; `family.templ`: MDP family | 4 / 5; 3 / 6 | 1 / 2; 1 / 3 | `P>=0 [F "goal"]` | the prob0/prob1 constraint |
 | `mdp-family-avoid-8-2-easy` | MDP family | 21169 / 89776 | 6 / 3584 | `P>0.9` | policy trees, families in SMPMC, the coloring builder |
 | `mdp-family-rocks-4-2` | MDP family | 162 / 594 | 4 / 81 | `P>=1`; `max.props`: `Pmax` | robust SMPMC |
@@ -77,4 +77,4 @@ Where the answers the tests expect come from:
 
 ## Random sketches
 
-`soundness/test_random_sketches.py` runs every engine on 25 random sketches. More of them look for new bugs, e.g. `PAYNT_RANDOM_SKETCHES=1000 pytest tests/soundness/test_random_sketches.py -n auto` (3 minutes on 8 cores); `PAYNT_RANDOM_FIRST_SEED` picks other sketches. The stable and latest CI run 500 new ones every time, starting from a seed given by the run number. A failure prints the sketch and its properties, and its test id is its seed; once reduced by hand, it becomes a model of `models/tests` with a case in `soundness/test_engines.py`.
+`soundness/test_random_sketches.py` runs every engine on 25 random sketches. More of them look for new bugs, e.g. `PAYNT_RANDOM_SKETCHES=1000 pytest tests/soundness/test_random_sketches.py -n auto` (3 minutes on 8 cores); `PAYNT_RANDOM_FIRST_SEED` picks other sketches. `mdp_family/test_random_families.py` does the same for the policy tree on 25 random MDP families (`PAYNT_RANDOM_FAMILIES`). The stable and latest CI run 500 new ones of each every time, starting from a seed given by the run number. A failure prints the sketch and its properties, and its test id is its seed; once reduced by hand, it becomes a model of `models/tests` with a case in `soundness/test_engines.py`.

@@ -337,10 +337,12 @@ namespace synthesis {
     bool CounterexampleGenerator<ValueType,StateType>::expandAndCheck (
         uint64_t index,
         ValueType formula_bound,
+        bool strict,
         std::vector<std::vector<std::pair<StateType,ValueType>>> & matrix_subdtmc,
         storm::models::sparse::StateLabeling const& labeling_subdtmc,
         std::unordered_map<std::string,storm::models::sparse::StandardRewardModel<ValueType>> & reward_models_subdtmc,
-        std::vector<StateType> const& to_expand
+        std::vector<StateType> const& to_expand,
+        storm::Environment const& env
     ) {
         
         // Get DTMC info
@@ -406,12 +408,6 @@ namespace synthesis {
             hint.setResultHint(this->hint_result->template asExplicitQuantitativeCheckResult<ValueType>().getValueVector());
             task.setHint(std::make_shared<storm::modelchecker::ExplicitModelCheckerHint<ValueType>>(hint));
         }
-        storm::Environment env;
-        // storm::SolverEnvironment & solver = env.solver();
-        // std::cout << solver.getLinearEquationSolverType() << std::endl;
-        // std::cout << solver.getPrecisionOfLinearEquationSolver() << std::endl;
-
-
         // Model check
         // std::unique_ptr<storm::modelchecker::CheckResult> result_ptr = storm::api::verifyWithSparseEngine<ValueType>(subdtmc, task);
         // storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType>& result = result_ptr->asExplicitQuantitativeCheckResult<ValueType>();
@@ -420,42 +416,22 @@ namespace synthesis {
         this->timer_model_check.stop();
         storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType>& result = this->hint_result->template asExplicitQuantitativeCheckResult<ValueType>();
 
-        // formula_modified[index] is constructed (see the constructor above) from whatever formula Python
-        // passed in -- today, always a bound-free quantitative formula (Specification.stormpy_formulae()),
-        // since a bound-carrying variant of this formula is what's being *searched for*, not something known
-        // up front. getComparisonType() asserts a bound is present (storm::logic::OperatorFormula::
-        // getComparisonType(), only checked -- and only aborts -- in a debug-mode storm build), so it must
-        // not be called at all when there is none; the strict-vs-non-strict distinction below then simply
-        // defaults to non-strict, matching this method's behavior before bound-carrying formulas were ever
-        // considered.
-        auto const& operator_formula = this->formula_modified[index]->asOperatorFormula();
-        bool use_strict_less = operator_formula.hasBound() && operator_formula.getComparisonType() == storm::logic::ComparisonType::Less;
-        bool use_strict_greater = operator_formula.hasBound() && operator_formula.getComparisonType() == storm::logic::ComparisonType::Greater;
-
-        bool satisfied;
+        // the formulae have no bound, so the comparison comes from the caller
+        ValueType value = result[initial_state];
         if(this->formula_safety[index]) {
-            if (use_strict_less) {
-                satisfied = result[initial_state] < formula_bound;
-            } else {
-                satisfied = result[initial_state] <= formula_bound;
-            }
-        } else {
-            if (use_strict_greater) {
-                satisfied = result[initial_state] > formula_bound;
-            } else {
-                satisfied = result[initial_state] >= formula_bound;
-            }
+            return strict ? value < formula_bound : value <= formula_bound;
         }
-
-        return satisfied;
+        return strict ? value > formula_bound : value >= formula_bound;
     }
 
     template <typename ValueType, typename StateType>
     std::vector<uint64_t> CounterexampleGenerator<ValueType,StateType>::constructConflict (
         uint64_t formula_index,
         ValueType formula_bound,
+        bool strict,
         std::shared_ptr<storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType> const> mdp_bounds,
-        std::vector<StateType> const& mdp_quotient_state_map
+        std::vector<StateType> const& mdp_quotient_state_map,
+        storm::Environment const& env
         ) {
         this->timer_conflict.start();
 
@@ -484,8 +460,8 @@ namespace synthesis {
         std::cout << std::endl;*/
         while(true) {
             bool satisfied = this->expandAndCheck(
-                formula_index, formula_bound, matrix_subdtmc, labeling_subdtmc,
-                reward_models_subdtmc, this->wave_states[wave]
+                formula_index, formula_bound, strict, matrix_subdtmc, labeling_subdtmc,
+                reward_models_subdtmc, this->wave_states[wave], env
             );
             // std::cout << "[storm] wave " << wave << "/" << wave_last << " : " << satisfied << std::endl;
             if(!satisfied) {

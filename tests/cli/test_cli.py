@@ -19,10 +19,6 @@ from paynt.examples import paynt_models_dir
 
 from tests.helpers.models import load_colored_mdp, load_sketch
 
-# the PRISM parser writes the sketch it parses next to the original, as sketch.templ<uuid>, and removes it right after: in a parallel run, another test may be
-# parsing the same project while it is copied
-PARSER_TEMPORARY = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
-
 
 @pytest.fixture
 def run_paynt(monkeypatch, tmp_path):
@@ -32,9 +28,7 @@ def run_paynt(monkeypatch, tmp_path):
 
     def run(project, *args):
         folder = tmp_path / os.path.basename(project)
-        shutil.copytree(
-            os.path.join(paynt_models_dir, project), folder, ignore=lambda _directory, names: [name for name in names if PARSER_TEMPORARY.search(name)]
-        )
+        shutil.copytree(os.path.join(paynt_models_dir, project), folder)
         result = CliRunner().invoke(paynt.cli.paynt_run, [str(folder), *args])
         assert result.exit_code == 0, repr(result.exception)
         return folder, result.output
@@ -69,7 +63,7 @@ def test_the_jani_export_is_the_unfolded_family(run_paynt):
 
 
 def read_pomdp_solve(path):
-    """The rows of every state, as sorted (successor, probability) tuples, one per action, and the observation of every state."""
+    """The rows of every state, as sorted (successor, probability) tuples, one per action, the observation of every state and the number of actions."""
     rows = collections.defaultdict(lambda: collections.defaultdict(list))
     observations = {}
     with open(path) as file:
@@ -79,18 +73,17 @@ def read_pomdp_solve(path):
         if line.startswith("T:"):
             _, action, state, entry = (part.strip() for part in line.split(":"))
             successor, probability = entry.split()
-            for one in range(num_actions) if action == "*" else [int(action)]:
-                rows[int(state)][one].append((int(successor), float(probability)))
+            rows[int(state)][int(action)].append((int(successor), float(probability)))
         if line.startswith("O:"):
             _, _action, state, entry = (part.strip() for part in line.split(":"))
             observations[int(state)] = int(entry.split()[0])
-    return {state: sorted(tuple(sorted(row)) for row in actions.values()) for state, actions in rows.items()}, observations
+    return {state: sorted(tuple(sorted(row)) for row in actions.values()) for state, actions in rows.items()}, observations, num_actions
 
 
 def test_the_pomdp_solve_export_has_the_transitions_and_observations_of_the_pomdp(run_paynt):
-    """A state with a single action gives it to every action of the file (`T: *`), so only the distinct rows are compared there."""
+    """A state with fewer actions than the file repeats its last one, so only the distinct rows are compared there."""
     folder, _output = run_paynt("tests/pomdp-maze", "--export", "pomdp")
-    rows, observations = read_pomdp_solve(folder / "sketch.pomdp")
+    rows, observations, num_actions = read_pomdp_solve(folder / "sketch.pomdp")
     pomdp = load_sketch("tests/pomdp-maze")[0].pomdp
     matrix = pomdp.transition_matrix
     for state in range(pomdp.nr_states):
@@ -98,16 +91,16 @@ def test_the_pomdp_solve_export_has_the_transitions_and_observations_of_the_pomd
             tuple(sorted((entry.column, entry.value) for entry in matrix.get_row(row)))
             for row in range(matrix.get_row_group_start(state), matrix.get_row_group_end(state))
         )
+        assert len(rows[state]) == num_actions
         assert sorted(set(rows[state])) == sorted(set(expected))
         assert observations[state] == pomdp.observations[state]
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="the Cassandra parser finds transitions summing to 0 in the file, and no parser takes it")
 def test_paynt_reads_its_pomdp_solve_export_back(run_paynt):
     folder, _output = run_paynt("tests/pomdp-maze", "--export", "pomdp")
     factory, _task = paynt.parser.sketch.Sketch.load_sketch(str(folder / "sketch.pomdp"), str(folder / "props.pomdp"))
-    # the Cassandra parser may add an initial state of its own
-    assert factory.pomdp.nr_states in (15, 16)
+    # the 15 states and an initial one the Cassandra parser adds
+    assert factory.pomdp.nr_states == 16
 
 
 def test_version_needs_no_project():

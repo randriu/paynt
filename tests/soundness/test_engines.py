@@ -21,7 +21,7 @@ import paynt.synthesizer.synthesizer_hybrid
 import paynt.synthesizer.synthesizer_onebyone
 
 from tests.helpers.engines import wrong_answers
-from tests.helpers.models import get_sketch_paths, load_sketch
+from tests.helpers.models import general_colored_mdp, get_sketch_paths, load_sketch
 from tests.helpers.reference import read_properties
 
 
@@ -47,31 +47,22 @@ def edge_case(sketch_name, *properties, **kwargs):
     return case("tests/edge-cases", list(properties), sketch_name=sketch_name, **kwargs)
 
 
-# the node is dropped when the design best for the objective alone violates a constraint
-CONSTRAINT_AND_OBJECTIVE = {"ar": "says infeasible", "hybrid": "says infeasible"}
-# the MDP of a family has an infinite maximal reward when a scheduler never reaches the goal, even if every design does, and that is taken for an invalid
-# result
-MAXIMIZED_INFINITE_REWARD = {"ar": "says infeasible", "smpmc": "says infeasible", "smpmc, general": "says infeasible"}
-# a design with a deadlock stops the search instead of being skipped
-DEADLOCK = {
-    engine: "raises ValueError: the coloring enables no choice in state 1" if not engine.endswith("general") else "raises RuntimeError: UnexpectedException"
-    for engine in ["onebyone", "cegis", "smpmc", "onebyone, general", "cegis, general", "smpmc, general"]
-}
-
 CASES = [
     case("tests/smpmc-tiny", "sketch.props"),
     case("tests/smpmc-tiny", "optimality.props"),
     case("tests/time-energy", "sketch.props"),
     case("tests/time-energy", "infeasible.props"),
-    case("tests/time-energy", "optimality.props", known_wrong=CONSTRAINT_AND_OBJECTIVE),
+    case("tests/time-energy", "optimality.props"),
     case("tests/time-energy", ['R{"energy"}min=? [F "arrived"]'], relative_error=0.5, id="time-energy: least energy, relative error 0.5"),
     case("tests/time-energy", ['R{"time"}max=? [F "arrived"]'], relative_error=0.5, id="time-energy: most time, relative error 0.5"),
-    case("tests/objective-optimum-violates-constraint", "sketch.props", known_wrong=CONSTRAINT_AND_OBJECTIVE),
-    case("tests/max-reward-infinite-designs", "sketch.props", known_wrong=MAXIMIZED_INFINITE_REWARD),
-    case("tests/max-reward-infinite-designs", "lower.props", known_wrong=MAXIMIZED_INFINITE_REWARD),
+    case("tests/objective-optimum-violates-constraint", "sketch.props"),
+    case("tests/max-reward-infinite-designs", "sketch.props"),
+    case("tests/max-reward-infinite-designs", "lower.props"),
     # families: a design is an MDP
     case("tests/mdp-family-correlated", "sketch.props"),
     case("tests/mdp-family-correlated", "min.props"),
+    # one design decides a constraint at the root, but not for every design
+    case("tests/constraint-decided-by-one-design", "sketch.props"),
     # thresholds equal to a value of a design
     edge_case("boundaries.templ", 'P>=1 [F "goal"]'),
     edge_case("boundaries.templ", 'P>1 [F "goal"]'),
@@ -83,8 +74,8 @@ CASES = [
     edge_case("boundaries.templ", 'R{"cost"}>=4 [F "done"]'),
     edge_case("boundaries.templ", 'Pmin=? [F "goal"]'),
     edge_case("boundaries.templ", 'R{"cost"}max=? [F "done"]'),
-    edge_case("boundaries.templ", 'P>=0.5 [F "goal"]', 'R{"cost"}min=? [F "done"]', known_wrong=CONSTRAINT_AND_OBJECTIVE),
-    edge_case("boundaries.templ", 'P<=0.5 [F "goal"]', 'Pmax=? [F "goal"]', known_wrong=CONSTRAINT_AND_OBJECTIVE),
+    edge_case("boundaries.templ", 'P>=0.5 [F "goal"]', 'R{"cost"}min=? [F "done"]'),
+    edge_case("boundaries.templ", 'P<=0.5 [F "goal"]', 'Pmax=? [F "goal"]'),
     edge_case("boundaries.templ", 'P>=0.5 [!"done" U "goal"]'),
     # a goal reached at once, and one never reached
     edge_case("reach.templ", 'P>=1 [F "start"]'),
@@ -99,8 +90,27 @@ CASES = [
     edge_case("unused-hole.templ", 'Pmin=? [F "goal"]'),
     edge_case("probability-hole.templ", 'P>=0.5 [F "goal"]'),
     edge_case("probability-hole.templ", 'Pmax=? [F "goal"]'),
-    # with H=1 no command is enabled in state 1: the design is skipped
-    edge_case("deadlock.templ", 'Pmin=? [F "goal"]', known_wrong=DEADLOCK),
+    # an until formula: checked as it is if a state where neither side holds can reach the goal, as reaching the goal otherwise
+    edge_case("until.templ", 'Pmax=? [!"bad" U "goal"]'),
+    edge_case("until.templ", 'Pmin=? [!"bad" U "goal"]'),
+    edge_case("until.templ", 'P>=0.4 [!"bad" U "goal"]'),
+    edge_case("until.templ", 'P<=0.4 [!"bad" U "goal"]'),
+    edge_case("until.templ", 'Pmax=? ["ok" U "goal"]'),
+    edge_case("until.templ", 'P>=0.1 [F "goal"]', 'Pmax=? ["ok" U "goal"]'),
+    edge_case("until.templ", 'P>=0.4 ["ok" U "goal"]', 'P>=0.4 [F "goal"]'),
+    # Storm's scheduler for the least cost is not a design of least cost
+    edge_case("zero-cost-loop.templ", 'R{"cost"}min=? [F "goal"]'),
+    edge_case("zero-cost-loop.templ", 'P>=0.5 [F "goal"]', 'R{"cost"}min=? [F "goal"]'),
+    # designs that reach a state without a command are skipped
+    edge_case("deadlock.templ", 'Pmin=? [F "goal"]'),
+    edge_case("deadlock-unreached-command.templ", 'P>=0.25 [F "goal"]'),
+    edge_case("deadlock-unreached-command.templ", 'P<0.25 [F "goal"]'),
+    edge_case("deadlock-unreached-command.templ", 'Pmax=? [F "goal"]'),
+    edge_case("deadlock-family.templ", 'P>=0.4 [F "goal"]'),
+    edge_case("deadlock-family.templ", 'Pmin=? [F "goal"]'),
+    edge_case("deadlock-family.templ", 'R{"cost"}min=? [F "done"]'),
+    edge_case("deadlock-family.templ", 'R{"cost"}max=? [F "done"]'),
+    edge_case("deadlock-family.templ", 'P>=0.4 [F "goal"]', 'R{"cost"}<=1.5 [F "done"]'),
 ]
 
 
@@ -113,21 +123,24 @@ def test_every_engine_gives_the_reference_answer(case, tmp_path):
         pytest.xfail("known wrong answers")
 
 
-@pytest.mark.xfail(strict=True, raises=ValueError, reason="OneByOne stops with an error at H=1")
-def test_onebyone_skips_a_design_with_a_deadlock_and_warns(tmp_path, caplog):
-    """OneByOne builds every design of deadlock.templ, so it comes across H=1, which enables no command in state 1."""
+@pytest.mark.parametrize("engine", ["onebyone", "cegis", "smpmc", "onebyone, general", "cegis, general", "smpmc, general"])
+def test_an_engine_that_tries_a_design_with_a_deadlock_skips_it_and_warns(engine, tmp_path, caplog):
+    """In deadlock.templ, H=1 enables no command in state 1; these engines try it, as H=0 alone does not show it worse."""
+    method, _, coloring = engine.partition(", ")
     props_path = tmp_path / "case.props"
     props_path.write_text('Pmin=? [F "goal"]\n')
     factory, task = paynt.parser.sketch.Sketch.load_sketch(get_sketch_paths("tests/edge-cases", "deadlock.templ")[0], str(props_path))
-    result = paynt.synthesizer.synthesizer.Synthesizer.for_method(factory.build(), task, "onebyone").run()
+    colored_mdp = factory.build() if coloring != "general" else general_colored_mdp(factory.build())
+    result = paynt.synthesizer.synthesizer.Synthesizer.for_method(colored_mdp, task, method).run()
     assert str(result.assignment) == "H=0"
-    assert any(record.levelname == "WARNING" and "H=1" in record.getMessage() for record in caplog.records)
+    assert [record.getMessage() for record in caplog.records if record.levelname == "WARNING"] == [
+        "skipping design H=1: state 1 (goal=False, s=1) is reachable and keeps no choice"
+    ]
 
 
 class TestAConstraintDecidedByOneDesign:
     """The sketch hybrid.templ of models/tests/constraint-decided-by-one-design: only H=1 satisfies both constraints, H=2 reaches the goal half of the time."""
 
-    @pytest.mark.xfail(strict=True, raises=AssertionError, reason="the cheapest scheduler is H=1 alone, which satisfies the specification")
     def test_ar_leaves_the_cost_constraint_open_at_the_root(self):
         factory, task = load_sketch("tests/constraint-decided-by-one-design", sketch_name="hybrid.templ", props_name="hybrid.props")
         synthesizer = paynt.synthesizer.synthesizer_ar.SynthesizerAR(factory.build(), task)
@@ -136,7 +149,6 @@ class TestAConstraintDecidedByOneDesign:
         synthesizer.verify_parameter_space(root)
         assert [result.sat for result in root.analysis_result.constraints_result.results] == [None, None]
 
-    @pytest.mark.xfail(strict=True, raises=AssertionError, reason="hybrid keeps searching after H=1 and accepts H=2 on the probability alone")
     def test_hybrid_without_cegis_finds_h_1(self, monkeypatch):
         """Without CEGIS, which may find H=1 at the root first, hybrid searches like AR."""
         monkeypatch.setattr(paynt.synthesizer.synthesizer_hybrid.StageControl, "only_ar", True)

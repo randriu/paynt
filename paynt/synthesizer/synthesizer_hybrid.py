@@ -117,6 +117,9 @@ class SynthesizerHybrid(paynt.synthesizer.synthesizer_ar.SynthesizerAR, paynt.sy
             # analyze the parameter space
             self.verify_parameter_space(node)
             self.update_optimum(node)
+            if self.best_assignment is not None and not self.task.specification.can_be_improved():
+                # an admissible design is all a specification without an objective asks for
+                return self.best_assignment
             assert node.analysis_result is not None
             if not node.analysis_result.can_improve:
                 self.explore(node.parameter_space)
@@ -133,9 +136,10 @@ class SynthesizerHybrid(paynt.synthesizer.synthesizer_ar.SynthesizerAR, paynt.sy
                 cr = node.analysis_result.constraints_result
                 assert cr is not None
                 # index 0 is wrong once a spec has 2+ constraints: constraint 0 may already be sat (dropped
-                # by an ancestor node, see SearchNode.collect_parent_info), leaving results[0] None
-                result = cr.results[cr.undecided_constraints[0]]
-            priority_node = self.search_node_type(node.parameter_space.assume_options_copy(result.primary_selection))
+                # by an ancestor node, see SearchNode.collect_parent_info), leaving results[0] None; and every
+                # constraint is when they all hold for every design, but the one tried is skipped
+                result = cr.results[cr.undecided_constraints[0]] if cr.undecided_constraints else None
+            priority_node = None if result is None else self.search_node_type(node.parameter_space.assume_options_copy(result.primary_selection))
 
             # explore parameter space assignments
             parameter_space_explored = False

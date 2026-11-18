@@ -68,8 +68,6 @@ class ColoredMdpTheory:
         self.colored_mdp = colored_mdp
         self.prop = prop
         self.stat = stat
-        # parameters per underlying-MDP state (a BitVector each), to minimize a conflict; only for standard colorings, see relevant_parameters()
-        self.state_to_parameters: list[Any] | None = None if colored_mdp.has_general_coloring else colored_mdp.coloring.getStateToHoles()
         self.cache = paynt.synthesizer.smpmc.cache.PartialModelCache()
         # bumped by the optimality loop (synthesizer.py) each time the threshold tightens, so verdicts cached under a looser threshold are not reused
         self.epoch = 0
@@ -139,19 +137,30 @@ class ColoredMdpTheory:
         for parameter, option in fixed.items():
             eta.parameter_set_options(parameter, [option])
 
-        if eta.size == 1:
-            sub_mdp = self.colored_mdp.build_assignment(eta)
-            paynt.utils.error_handling.require_markov_chain_for_robust_search(sub_mdp, self.policy_parameters)
-        else:
-            # No parent_selected_choices reuse hint: it assumes nested parameter spaces (true for AR's splitting), which Z3's CDCL backtracking does not give.
-            sub_mdp, _selected_choices = self.colored_mdp.build(eta)
+        try:
+            if eta.size == 1:
+                sub_mdp = self.colored_mdp.build_assignment(eta)
+                paynt.utils.error_handling.require_markov_chain_for_robust_search(sub_mdp, self.policy_parameters)
+            else:
+                # No parent_selected_choices reuse hint: it assumes nested parameter spaces (true for AR's splitting), which Z3's CDCL backtracking does not
+                # give.
+                sub_mdp, _selected_choices = self.colored_mdp.build(eta)
+        except paynt.utils.error_handling.DeadlockedDesigns as error:
+            return self.check_skipped(fixed, polarity, error)
+        robust_query = polarity is False and self.policy_parameters is not None
+        if robust_query and eta.size > 1 and self.colored_mdp.states_without_a_choice(eta, sub_mdp.deciding_states):
+            # a design of eta that gets stuck is not viable, and the sub-MDP holds the choices that the other designs take where it gets stuck: its worst case
+            # says nothing about that design (only a robust search asks for `not viable`, as only there is viable(...) under a quantifier)
+            self.cache.insert_inconclusive(fixed, polarity, self.epoch)
+            return None
         self.mc_calls += 1
         if self.stat is not None:
             self.stat.iteration(sub_mdp)
 
         result = self._model_check(sub_mdp, alt=(polarity is False))
 
-        if result.sat is polarity:
+        # an infinite best case over several designs says nothing about them (see Property.best_case_is_unknown)
+        if result.sat is polarity or (polarity and eta.size > 1 and self.prop.best_case_is_unknown(result.value)):
             self.cache.insert_inconclusive(fixed, polarity, self.epoch)
             return None
 
@@ -159,17 +168,7 @@ class ColoredMdpTheory:
         # irrelevant) in the induced sub-MDP
         relevant_parameters = self.relevant_parameters(eta, sub_mdp)
         conflict_parameters = [parameter for parameter in fixed if parameter in relevant_parameters]
-
-        if self.stat is not None:
-            # 'explored' estimate of this refutation: it rules out every complete assignment that agrees with it on conflict_parameters
-            # This means this is an estimate not a precise count
-            pruning_estimate = math.prod(
-                self.colored_mdp.parameter_space.parameter_num_options(parameter)
-                for parameter in range(self.colored_mdp.parameter_space.num_parameters)
-                if parameter not in conflict_parameters
-            )
-            assert self.stat.synthesizer.explored is not None
-            self.stat.synthesizer.explored += pruning_estimate
+        self._explore(conflict_parameters)
 
         exact = eta.size == 1
         self.cache.insert_refuted(fixed, polarity, conflict_parameters, self.epoch, result.value, exact)
@@ -177,16 +176,42 @@ class ColoredMdpTheory:
             self._record_worst_case(fixed, result.value, exact)
         return TheoryResult(conflict_parameters, result.value)
 
+    def check_skipped(self, fixed: dict[int, int], polarity: bool, error: paynt.utils.error_handling.DeadlockedDesigns) -> TheoryResult | None:
+        """Every design of the partial assignment leaves a state it reaches without a choice: none is viable, as each is skipped, so `viable(...)` is refuted
+        and `not viable(...)` holds.
+
+        In a robust search, a policy that gets stuck in an environment is thus not robust.
+        """
+        if polarity is False:
+            self.cache.insert_inconclusive(fixed, polarity, self.epoch)
+            return None
+        logger.warning(error)
+        relevant_parameters = self.colored_mdp.relevant_parameters(error.parameter_space, error.states)
+        conflict_parameters = [parameter for parameter in fixed if parameter in relevant_parameters]
+        self._explore(conflict_parameters)
+        self.cache.insert_refuted(fixed, polarity, conflict_parameters, self.epoch, None, True)
+        return TheoryResult(conflict_parameters, None)
+
+    def _explore(self, conflict_parameters: list[int]) -> None:
+        """Count the complete assignments that a refutation rules out, those that agree with it on conflict_parameters, as explored.
+
+        An estimate, as refutations overlap.
+        """
+        if self.stat is None:
+            return
+        # a set: in a robust search, with a parameter per state, a conflict can hold tens of thousands of them
+        conflict = set(conflict_parameters)
+        pruning_estimate = math.prod(
+            self.colored_mdp.parameter_space.parameter_num_options(parameter)
+            for parameter in range(self.colored_mdp.parameter_space.num_parameters)
+            if parameter not in conflict
+        )
+        assert self.stat.synthesizer.explored is not None
+        self.stat.synthesizer.explored += pruning_estimate
+
     def relevant_parameters(self, eta: paynt.parameter_space.parameter_space.ParameterSpace, sub_mdp: Any) -> set[int]:
         """The parameters the sub-MDP C[eta] depends on (Theorem 6): fixing any other parameter differently cannot change it, so a conflict may drop them."""
-        states = sub_mdp.underlying_mdp_state_map
-        if self.colored_mdp.has_general_coloring:
-            return set(self.colored_mdp.coloring.relevantParameters(eta.native, list(states)))
-        assert self.state_to_parameters is not None
-        relevant = stormpy.datastructures.BitVector(self.colored_mdp.parameter_space.num_parameters, False)
-        for state in states:
-            relevant |= self.state_to_parameters[state]
-        return set(relevant)
+        return self.colored_mdp.relevant_parameters(eta, sub_mdp.deciding_states)
 
     def _record_worst_case(self, fixed: dict[int, int], value: Any, exact: bool) -> None:
         """Account a refuted `not viable` literal, whose region's worst case is (bounded by) value, to its policy -- if the policy is fully fixed."""
@@ -255,8 +280,8 @@ class ColoredMdpTheory:
         self._reward_convergence_verified[alt] = True
         pi_result = self._model_check_with_environment(sub_mdp, alt, self._pi_environment())
         vi_value, pi_value = vi_result.value, pi_result.value
-        relative_error = abs(vi_value - pi_value) / max(abs(pi_value), 1e-12)
-        if relative_error <= _REWARD_CONVERGENCE_RELATIVE_TOLERANCE:
+        # equal values agree, inf included, where the relative error would be nan
+        if vi_value == pi_value or abs(vi_value - pi_value) / max(abs(pi_value), 1e-12) <= _REWARD_CONVERGENCE_RELATIVE_TOLERANCE:
             return vi_result
 
         logger.warning(

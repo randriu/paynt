@@ -2,7 +2,8 @@
 
 The holes of the sketch are replaced by constants, one design at a time, so none of PAYNT's parsing, coloring or search is involved. A design of an MDP sketch
 is an MDP, and each property is checked in its own direction: the best policy for it. As in PAYNT, a design whose expected reward is infinite (it does not reach
-the goal for sure) satisfies no reward property, and a design whose holes leave a state without a command that other designs have there is skipped.
+the goal for sure) satisfies no reward property, and a design whose holes leave a state it reaches without a command is skipped if another design has a command
+there, whether that design reaches the state or not (a state with a command in no design keeps the self-loop that Storm gives it).
 """
 
 from __future__ import annotations
@@ -20,6 +21,8 @@ from fractions import Fraction
 import stormpy
 
 HOLE = re.compile(r"^\s*hole\s+(\w+)\s+(\w+)\s+in\s+\{(.*?)\}\s*;")
+# a variable declaration with its initial value
+INITIAL_VALUE = re.compile(r"^(\s*(?:global\s+)?\w+\s*:\s*(?:\[[^\]]*\]|bool|int))\s+init\s+[^;]+;")
 COMPARISONS = {
     stormpy.logic.ComparisonType.LESS: operator.lt,
     stormpy.logic.ComparisonType.LEQ: operator.le,
@@ -70,7 +73,7 @@ class Design:
     options: tuple
     # one value per property: a Fraction, or math.inf for an infinite reward
     values: tuple
-    # the valuations of the states without a command, and of the others
+    # the valuations of the states it reaches and that have no command, and of every state that has one
     deadlocks: frozenset = frozenset()
     live: frozenset = frozenset()
 
@@ -101,11 +104,20 @@ def _value(model, formula):
     return value if value == math.inf else Fraction(str(value))
 
 
-def _valuations(model):
-    """The valuations of the states that have no command (Storm gives them a self-loop and the label "deadlock"), and of the others."""
-    deadlocks = set(model.labeling.get_states("deadlock"))
-    valuations = [str(model.state_valuations.to_string(state)) for state in range(model.nr_states)]
-    return frozenset(valuations[state] for state in deadlocks), frozenset(valuations[state] for state in range(model.nr_states) if state not in deadlocks)
+def _valuations(model, states):
+    """The valuations of the states of the model."""
+    return frozenset(str(model.state_valuations.to_string(state)) for state in states)
+
+
+def _write(lines, path):
+    with open(path, "w") as file:
+        file.writelines(lines)
+    return path
+
+
+def _from_everywhere(lines):
+    """The lines of the program started in every valuation: its model has every state, reachable or not."""
+    return [INITIAL_VALUE.sub(r"\1;", line) for line in lines] + ["\ninit true endinit\n"]
 
 
 def read_properties(props_path):
@@ -131,17 +143,21 @@ class Reference:
                 for (index, kind, name, options), option in zip(holes, combination, strict=True):
                     low, high = min(options, key=number), max(options, key=number)
                     design_lines[index] = f"const {kind} {name} = {option}; const {kind} {name}_MIN = {low}; const {kind} {name}_MAX = {high};\n"
-                with open(path, "w") as file:
-                    file.writelines(design_lines)
-                program = stormpy.parse_prism_program(path, prism_compatibility=True)
+                program = stormpy.parse_prism_program(_write(design_lines, path), prism_compatibility=True, simplify=False)
                 parsed = [stormpy.parse_properties(line, program)[0] for line in properties]
                 formulas, self.properties = zip(*[_formula(prop) for prop in parsed], strict=True)
                 builder_options = stormpy.BuilderOptions([prop.get_raw_formula() for prop in parsed])
                 builder_options.set_build_state_valuations(True)
                 model = stormpy.build_model[stormpy.Rational](program, options=builder_options)
+                # Storm gives a state without a command a self-loop and the label "deadlock"
+                deadlocks = _valuations(model, model.labeling.get_states("deadlock"))
+                everywhere = stormpy.build_model[stormpy.Rational](
+                    stormpy.parse_prism_program(_write(_from_everywhere(design_lines), path), prism_compatibility=True, simplify=False), options=builder_options
+                )
+                live = _valuations(everywhere, [state for state in range(everywhere.nr_states) if state not in everywhere.labeling.get_states("deadlock")])
                 values = tuple(_value(model, formula) for formula in formulas)
                 options = tuple((name, option) for (_, _, name, _), option in zip(holes, combination, strict=True))
-                self.designs.append(Design(options, values, *_valuations(model)))
+                self.designs.append(Design(options, values, deadlocks, live))
         live = frozenset().union(*(design.live for design in self.designs))
         self.designs = [design for design in self.designs if not design.deadlocks & live]
 

@@ -32,7 +32,6 @@ class TestPomdpSynthesis:
         value = stormpy.model_checking(dtmc, synthesizer.task.get_property().formula).get_value(dtmc.initial_states[0])
         assert value == pytest.approx(synthesizer.task.specification.optimality.optimum, rel=1e-4)
 
-    @pytest.mark.xfail(strict=True, reason="from_json drops the labels and makes a deterministic FSC stochastic")
     def test_an_fsc_read_back_from_json_is_the_same(self, pomdp_maze):
         synthesizer = paynt.pomdp.PomdpSynthesizer(pomdp_maze.factory, pomdp_maze.task, method="ar")
         assignment = synthesizer.synthesize(synthesizer.colored_mdp.parameter_space, print_stats=False)

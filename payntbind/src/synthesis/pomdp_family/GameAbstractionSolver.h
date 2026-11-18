@@ -45,14 +45,25 @@ namespace synthesis {
         /**
          * Solve the game induced by the sub-MDP.
          * @param quotient_choice_mask Choices of the quotient that remained in the sub-MDP.
+         * @param stuck_choices Choices of actions that some member of the family does not offer in their state: when Player 1 picks such an action,
+         *   Player 2 may also leave it stuck, with no choice, which loses for Player 1 (the target is never reached when maximizing, is reached when
+         *   minimizing).
          */
-        void solveSg(storm::storage::BitVector const& quotient_choice_mask);
+        void solveSg(storm::storage::BitVector const& quotient_choice_mask, storm::storage::BitVector const& stuck_choices);
         void solveSmg(storm::storage::BitVector const& quotient_choice_mask);
 
         /** For each state, the value of the game. */
         std::vector<double> solution_state_values;
         /** Value of the game in the initial state. */
         double solution_value;
+        /** Whether the policy iteration converged within max_policy_iterations. */
+        bool solution_converged;
+
+        /**
+         * Iterations after which the policy iteration of solveSg is cut off: Storm's improves the strategies of both players at once, which may cycle
+         * forever. The benchmarks converge within 20.
+         */
+        uint64_t max_policy_iterations = 100;
         
         /**
          * For each state, an action selected by Player 1. State s contains quotient_num_actions if the action was not

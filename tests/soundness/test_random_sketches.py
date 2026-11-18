@@ -1,9 +1,8 @@
-"""Every engine against the reference on small random sketches: a DTMC of a few states, where a hole decides which distribution some states take.
+"""Every engine against the reference on small random sketches: a DTMC of a few states, where a hole decides which distribution some states take, and may leave
+one without a command (the designs that reach it there are skipped).
 
-A threshold lies between two values of the designs, at least MARGIN away from all of them, so that the verdict does not depend on the precision. No
-specification maximizes a reward or has an objective together with a constraint, which hit known bugs (see test_engines.py). Two constraints, and costs some
-design never finishes paying, still hit known bugs of AR in about 2 of 1000 sketches, though not in the default 25. PAYNT_RANDOM_SKETCHES sets the number of
-sketches, PAYNT_RANDOM_FIRST_SEED the seed of the first one.
+A threshold lies between two values of the designs, at least MARGIN away from all of them, so that the verdict does not depend on the precision.
+PAYNT_RANDOM_SKETCHES sets the number of sketches, PAYNT_RANDOM_FIRST_SEED the seed of the first one.
 """
 
 from __future__ import annotations
@@ -24,7 +23,8 @@ FIRST_SEED = int(os.environ.get("PAYNT_RANDOM_FIRST_SEED", "0"))
 
 
 def random_sketch(rng):
-    """The text of a random DTMC sketch with an absorbing goal, and maybe an absorbing sink."""
+    """The text of a random DTMC sketch with an absorbing goal, maybe an absorbing sink and states that some options of a hole leave without a command, and a
+    state to avoid (labels "avoid" and "safe")."""
     num_states = rng.randint(3, 6)
     goal = num_states - 1
     absorbing = {goal, goal - 1} if rng.random() < 0.5 else {goal}
@@ -40,6 +40,8 @@ def random_sketch(rng):
         if rng.random() < 0.7:
             name, options = rng.choice(holes)
             guards = [(f"s={state} & {name}={option}", f"a{state}_{option}") for option in range(options)]
+            if rng.random() < 0.15:
+                guards.pop(rng.randrange(options))
         else:
             guards = [(f"s={state}", f"a{state}")]
         for guard, action in guards:
@@ -48,7 +50,9 @@ def random_sketch(rng):
             distribution = " + ".join(f"{weight}/{sum(weights)} : (s'={successor})" for successor, weight in zip(successors, weights, strict=True))
             lines.append(f"    [{action}] {guard} -> {distribution};")
             rewards.append(f"    [{action}] true : {rng.randint(0, 3)};")
-    lines += ["endmodule", "", f'label "goal" = s={goal};', "", 'rewards "cost"', *rewards, "endrewards", ""]
+    avoid = rng.randrange(goal)
+    labels = [f'label "goal" = s={goal};', f'label "avoid" = s={avoid};', f'label "safe" = s!={avoid};']
+    lines += ["endmodule", "", *labels, "", 'rewards "cost"', *rewards, "endrewards", ""]
     return "\n".join(lines)
 
 
@@ -65,15 +69,24 @@ def as_decimal(number):
 
 
 def random_specification(rng, sketch_path):
-    """Properties on the goal: one or two constraints, or one objective."""
-    probabilities = [design.values[0] for design in Reference(sketch_path, ['P=? [F "goal"]']).designs]
+    """Properties on the goal: one or two constraints, an objective, or an objective with a constraint; a probability may be of reaching the goal without the
+    state to avoid."""
+    path = rng.choice(['F "goal"', '!"avoid" U "goal"', '"safe" U "goal"'])
+    # every design may be skipped
+    probabilities = [design.values[0] for design in Reference(sketch_path, [f"P=? [{path}]"]).designs] or [Fraction(0)]
     costs = [design.values[0] for design in Reference(sketch_path, ['R{"cost"}=? [F "goal"]']).designs]
     finite_costs = [cost for cost in costs if cost != float("inf")] or [Fraction(0)]
-    probability = f'P{rng.choice([">=", ">", "<=", "<"])}{as_decimal(threshold(rng, probabilities))} [F "goal"]'
-    cost = f'R{{"cost"}}{rng.choice(["<=", "<"])}{as_decimal(threshold(rng, finite_costs))} [F "goal"]'
-    objectives = ['Pmax=? [F "goal"]', 'Pmin=? [F "goal"]', 'R{"cost"}min=? [F "goal"]']
-    kind = rng.choice(["probability", "cost", "both", "objective"])
-    return {"probability": [probability], "cost": [cost], "both": [probability, cost], "objective": [rng.choice(objectives)]}[kind]
+    probability = f"P{rng.choice(['>=', '>', '<=', '<'])}{as_decimal(threshold(rng, probabilities))} [{path}]"
+    cost = f'R{{"cost"}}{rng.choice([">=", ">", "<=", "<"])}{as_decimal(threshold(rng, finite_costs))} [F "goal"]'
+    objective = rng.choice([f"Pmax=? [{path}]", f"Pmin=? [{path}]", 'R{"cost"}max=? [F "goal"]', 'R{"cost"}min=? [F "goal"]'])
+    kind = rng.choice(["probability", "cost", "both", "objective", "constrained objective"])
+    return {
+        "probability": [probability],
+        "cost": [cost],
+        "both": [probability, cost],
+        "objective": [objective],
+        "constrained objective": [rng.choice([probability, cost]), objective],
+    }[kind]
 
 
 @pytest.mark.parametrize("seed", range(FIRST_SEED, FIRST_SEED + SKETCHES))

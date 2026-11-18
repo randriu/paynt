@@ -39,6 +39,14 @@ class SynthesizerSMPMC(paynt.synthesizer.synthesizer.Synthesizer):
         super().__init__(colored_mdp, task)
         spec = task.specification
         paynt.utils.error_handling.require_single_property(spec)
+        if task.verify_robust:
+            paynt.utils.error_handling.require_no_step_bounds(
+                spec,
+                "--smpmc-verify-robust",
+                "it checks the result again with AR, which needs Storm's best scheduler of an MDP, and "
+                + paynt.utils.error_handling.NO_SCHEDULER_FOR_STEP_BOUNDS,
+                "drop the option",
+            )
         self.prop: paynt.specification.property.Property = spec.optimality if spec.optimality is not None else spec.constraints[0]
         # SMPMC always needs a constraint, as it supplies the viable(...) clause that the theory integration depends on, so it defaults to "exists"
         self.constraint = paynt.parameter_space.constraints.build_constraint(task.constraint_name or "exists")

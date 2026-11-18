@@ -22,10 +22,14 @@ def verify_robust(
     value: Any = None,
 ) -> bool:
     """Check a robust result independently of Z3, as molehill's tests/test_robust.py does: robust_assignment is robust iff AR finds none of its members to
-    satisfy the negated specification.
+    satisfy the negated specification, and none of them gets stuck in a state without a choice (AR skips such a member).
 
     :param value: for an optimality objective, the claimed worst case over robust_assignment, checked as the threshold "at least as good as value"
     """
+    stuck = colored_mdp.find_deadlocked_design(robust_assignment)
+    if stuck is not None:
+        logger.error(f"robustness check failed, this member reaches a state without a choice: {stuck}")
+        return False
     specification = task.specification
     if specification.optimality is not None:
         assert value is not None, "verifying a robust optimum needs its value"

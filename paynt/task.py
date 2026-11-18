@@ -22,7 +22,6 @@ class SynthesisTask:
         use_exact: bool = False,
         relative_error: float = 0,
         export_synthesis_filename_base: str | None = None,
-        conflict_generator_type: str | None = None,
         disable_expected_visits: bool = False,
         discard_unreachable_choices: bool = False,
         constraint_name: str | None = None,
@@ -35,7 +34,6 @@ class SynthesisTask:
         self.timeout = timeout
         self.use_exact = use_exact
         self.export_synthesis_filename_base = export_synthesis_filename_base
-        self.conflict_generator_type = conflict_generator_type
         self.disable_expected_visits = disable_expected_visits
         # PolicyTreeSynthesizer: if set, unreachable choices are discarded from the splitting scheduler
         self.discard_unreachable_choices = discard_unreachable_choices
@@ -56,7 +54,6 @@ class SynthesisTask:
         timeout: int | None = None,
         use_exact: bool = False,
         export_synthesis_filename_base: str | None = None,
-        conflict_generator_type: str | None = None,
         disable_expected_visits: bool = False,
         discard_unreachable_choices: bool = False,
         constraint_name: str | None = None,
@@ -85,7 +82,6 @@ class SynthesisTask:
         task.timeout = timeout
         task.use_exact = use_exact
         task.export_synthesis_filename_base = export_synthesis_filename_base
-        task.conflict_generator_type = conflict_generator_type
         task.disable_expected_visits = disable_expected_visits
         task.discard_unreachable_choices = discard_unreachable_choices
         task.constraint_name = constraint_name

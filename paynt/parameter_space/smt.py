@@ -35,8 +35,7 @@ class ParameterSpaceEncoding:
 
         parameter_clauses = []
         for parameter in range(parameter_space.num_parameters):
-            all_clauses = smt_solver.solver_clauses[parameter]
-            clauses = [all_clauses[option] for option in parameter_space.parameter_options(parameter)]
+            clauses = [smt_solver.solver_clauses[parameter][option] for option in parameter_space.parameter_options(parameter)]
             or_clause = clauses[0] if len(clauses) == 1 else z3.Or(clauses)
             parameter_clauses.append(or_clause)
 
@@ -74,23 +73,24 @@ class SmtSolver:
         task: paynt.task.SynthesisTask | None = None,
     ):
 
+        # a context of its own: Z3's global one answers the same query with another model in every new solver, so CEGIS would not be deterministic
+        self.ctx = z3.Context()
         # SMT solver containing description of the unexplored design space
-        self.solver = z3.Solver()
+        self.solver = z3.Solver(ctx=self.ctx)
 
         # for each parameter contains a corresponding solver variable
         self.solver_vars: list[Any]
-        self.solver_vars, self.width, _name_to_parameter = paynt.parameter_space.bitvec.parameter_bitvec_variables(parameter_space)
-        # for each parameter contains a list of equalities [p==opt1,p==opt2,...],
-        #   where p is the corresponding solver variable
-        self.solver_clauses: list[list[Any]] = []
+        self.solver_vars, self.width, _name_to_parameter = paynt.parameter_space.bitvec.parameter_bitvec_variables(parameter_space, self.ctx)
+        # for each parameter, its options mapped to the equalities p==option, where p is the corresponding solver variable; keyed by the option, since the
+        # parameter space may already be narrowed to some of them
+        self.solver_clauses: list[dict[int, Any]] = []
 
         # current depth of push/pop solving
         self.solver_depth = 0
 
         # create solver clauses
         for parameter in range(parameter_space.num_parameters):
-            clauses = [self.create_parameter_clause(parameter, option) for option in parameter_space.parameter_options(parameter)]
-            self.solver_clauses.append(clauses)
+            self.solver_clauses.append({option: self.create_parameter_clause(parameter, option) for option in parameter_space.parameter_options(parameter)})
 
         # custom constraint (e.g. --constraint costs/prob0/prob1), built once here rather than per node
         self.constraint_clauses: list[Any] = []
@@ -103,7 +103,7 @@ class SmtSolver:
 
     def create_parameter_clause(self, parameter: int, option: int) -> Any:
         var = self.solver_vars[parameter]
-        return var == z3.BitVecVal(option, self.width)
+        return var == z3.BitVecVal(option, self.width, ctx=self.ctx)
 
     def pick_assignment(self, node: paynt.synthesizer.search_node.SearchNode) -> paynt.parameter_space.parameter_space.ParameterSpace | None:
         """:return: unexplored parameter assignment from node's parameter space (or None if no instance remains)"""

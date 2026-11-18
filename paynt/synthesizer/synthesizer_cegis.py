@@ -7,8 +7,6 @@ import paynt.task
 import paynt.synthesizer.search_node
 import paynt.synthesizer.synthesizer
 import paynt.synthesizer.conflict_generator.auto
-import paynt.synthesizer.conflict_generator.dtmc
-import paynt.synthesizer.conflict_generator.mdp
 import paynt.parameter_space.parameter_space
 import paynt.parameter_space.smt
 import paynt.parameter_space.constraints
@@ -22,25 +20,20 @@ logger = logging.getLogger(__name__)
 class SynthesizerCEGIS(paynt.synthesizer.synthesizer.Synthesizer):
     def __init__(self, colored_mdp: paynt.colored_mdp.ColoredMdp, task: paynt.task.SynthesisTask):
         super().__init__(colored_mdp, task)
+        paynt.utils.error_handling.require_no_step_bounds(
+            task.specification,
+            "CEGIS (also inside hybrid)",
+            "its counterexamples need an until or reachability formula without a step bound",
+            "use --method onebyone or smpmc",
+        )
 
-        self.conflict_generator = self.choose_conflict_generator(colored_mdp, task)
+        # the DTMC conflict generator, or the MDP one for an assignment whose model still has nondeterminism
+        self.conflict_generator = paynt.synthesizer.conflict_generator.auto.ConflictGeneratorAuto(colored_mdp, task)
 
         paynt.utils.error_handling.require_no_maximizing_reward(self.task.specification)
 
         # no constraint unless one is requested via --constraint
         self.constraint = paynt.parameter_space.constraints.build_constraint(task.constraint_name) if task.constraint_name else None
-
-    def choose_conflict_generator(
-        self, colored_mdp: paynt.colored_mdp.ColoredMdp, task: paynt.task.SynthesisTask
-    ) -> paynt.synthesizer.conflict_generator.dtmc.ConflictGeneratorDtmc:
-        if task.conflict_generator_type == "mdp":
-            conflict_generator: paynt.synthesizer.conflict_generator.dtmc.ConflictGeneratorDtmc = paynt.synthesizer.conflict_generator.mdp.ConflictGeneratorMdp(
-                colored_mdp, task
-            )
-        else:
-            # default conflict generator: the DTMC one, unless the model of an assignment still has nondeterminism
-            conflict_generator = paynt.synthesizer.conflict_generator.auto.ConflictGeneratorAuto(colored_mdp, task)
-        return conflict_generator
 
     @property
     def method_name(self) -> str:
@@ -83,7 +76,10 @@ class SynthesizerCEGIS(paynt.synthesizer.synthesizer.Synthesizer):
         assert node.mdp is not None, "analyzed parameter space does not have an associated underlying MDP"
         assert self.stat is not None
 
-        dtmc = self.colored_mdp.build_assignment(assignment)
+        try:
+            dtmc = self.colored_mdp.build_assignment(assignment)
+        except paynt.utils.error_handling.DeadlockedDesigns as error:
+            return [self.deadlock_conflict(error)], None
         self.stat.iteration(dtmc)
         result = dtmc.check_specification(self.task.specification, node.constraint_indices, short_evaluation=True)
         # analyze model checking results
@@ -103,11 +99,27 @@ class SynthesizerCEGIS(paynt.synthesizer.synthesizer.Synthesizer):
 
         return conflicts, accepting_assignment
 
+    def deadlock_conflict(self, error: paynt.utils.error_handling.DeadlockedDesigns) -> list[int]:
+        """The conflict of a design that is skipped: the parameters that decide the choices on its way to the state it leaves without a choice, on which every
+        design that agrees with it is skipped too."""
+        conflict = sorted(self.colored_mdp.relevant_parameters(error.parameter_space, error.states))
+        if len(conflict) == error.parameter_space.num_parameters:
+            logger.warning(error)
+        else:
+            names = ", ".join(self.colored_mdp.parameter_space.parameter_name(parameter) for parameter in conflict)
+            logger.warning(f"{error}; so is every design that agrees with it on {names}" if conflict else f"{error}; so is every design")
+        return conflict
+
     def synthesize_one(self, node: paynt.synthesizer.search_node.SearchNode) -> paynt.parameter_space.parameter_space.ParameterSpace | None:
 
         # build the induced sub-MDP, mapping mdp states to parameter indices
         parent_selected_choices = node.parent_info.selected_choices if node.parent_info is not None else None
-        node.mdp, node.selected_choices = self.colored_mdp.build(node.parameter_space, parent_selected_choices)
+        try:
+            node.mdp, node.selected_choices = self.colored_mdp.build(node.parameter_space, parent_selected_choices)
+        except paynt.utils.error_handling.DeadlockedDesigns as error:
+            logger.warning(error)
+            self.explore(node.parameter_space)
+            return None
         self.conflict_generator.initialize()
 
         # use sketch design space as a SAT baseline (TODO why?)
