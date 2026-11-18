@@ -44,6 +44,7 @@ class Synthesizer:
 
         if method in ("ar", "hybrid"):
             paynt.utils.error_handling.require_pair_list_coloring(colored_mdp.coloring, f"method {method!r}", "use --method onebyone, cegis or smpmc")
+        paynt.utils.error_handling.require_plain_sketch_for_conditional(task.specification, colored_mdp.feature_kind)
 
         if method == "onebyone":
             return paynt.synthesizer.synthesizer_onebyone.SynthesizerOneByOne(colored_mdp, task)

@@ -25,6 +25,7 @@ void define_synthesis(py::module& m) {
     bindings_pomdp_family(m);
     bindings_storage(m);
     bindings_mdp_family(m);
+    bindings_conditional(m);
 
     bindings_coloring(m);
     bindings_settrie(m);

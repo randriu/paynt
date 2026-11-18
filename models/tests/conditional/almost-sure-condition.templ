@@ -1,0 +1,16 @@
+// h=0 and h=1 have value 1, h=2 has 1/2. Every design reaches the condition almost surely from s=0, where Storm's best scheduler for the least value does
+// not take the choice that attains it (it takes h=0, see payntbind's Conditional.h).
+dtmc
+
+hole int h in {0..2};
+
+module m
+    s : [0..4] init 0;
+    [] s=0 & h=0 -> (s'=4);
+    [] s=0 & h=1 -> (s'=4);
+    [] s=0 & h=2 -> 3/8 : (s'=3) + 3/8 : (s'=4) + 2/8 : (s'=0);
+    [] s>2 -> true;
+endmodule
+
+label "goal" = s=4;
+label "condition" = s=3 | s=4;

@@ -20,10 +20,10 @@ def close(a, b):
 
 
 def refuses(engine, reference):
-    """Whether the engine does not support the specification: CEGIS (also in hybrid) a maximized reward, SMPMC several properties."""
+    """Whether the engine does not support the specification: CEGIS (also in hybrid) a maximized reward or a conditional property, SMPMC several properties."""
     method = engine.split(",")[0]
     if method in ("cegis", "hybrid"):
-        return any(prop.reward and prop.maximizing for prop in reference.properties)
+        return any((prop.reward and prop.maximizing) or prop.conditional for prop in reference.properties)
     return method == "smpmc" and len(reference.properties) > 1
 
 

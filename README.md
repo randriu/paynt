@@ -92,6 +92,10 @@ SAYNT [6] and Storm associated options (pomdp-api branch of Storm and Stormpy ar
 - ``--use-storm-cutoffs``: if enabled the actions from cut-offs are considered in the prioritization and unfolding
 - ``--export-synthesis PATH``: stores the synthesis result to speciefied PATH
 
+Options for conditional reachability properties ``P [F target || F condition]`` (the probability of reaching the target given that the condition is reached), which AR, one-by-one and SMPMC support on DTMC sketches; a design that never reaches the condition satisfies none:
+- ``--conditional-parameters [shared|per-phase]``: by default every design sets the parameters once; with ``per-phase``, the parameters may be set anew once the condition is reached (copies ``<name>@condition``) and once the target is reached first (copies ``<name>@target``) [default: ``shared``]
+- ``--conditional-algorithm [default|restart|bisection|bisection-advanced|bisection-pt|bisection-advanced-pt]``: Storm's algorithm for them [default: ``default``]
+
 Other options:
 - ``--help``: shows the help message of the PAYNT and aborts
 - ``--export [jani|drn|pomdp]``: exports the model to *.drn/*.pomdp and aborts

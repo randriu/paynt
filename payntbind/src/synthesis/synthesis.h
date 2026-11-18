@@ -12,6 +12,7 @@ void bindings_counterexamples(py::module &m);
 void bindings_pomdp_family(py::module &m);
 void bindings_storage(py::module &m);
 void bindings_mdp_family(py::module &m);
+void bindings_conditional(py::module &m);
 
 void bindings_coloring(py::module &m);
 void bindings_settrie(py::module &m);

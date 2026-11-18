@@ -47,6 +47,10 @@ def edge_case(sketch_name, *properties, **kwargs):
     return case("tests/edge-cases", list(properties), sketch_name=sketch_name, **kwargs)
 
 
+def conditional_case(*properties, sketch_name="undefined.templ", **kwargs):
+    return case("tests/conditional", list(properties), sketch_name=sketch_name, **kwargs)
+
+
 CASES = [
     case("tests/smpmc-tiny", "sketch.props"),
     case("tests/smpmc-tiny", "optimality.props"),
@@ -111,6 +115,22 @@ CASES = [
     edge_case("deadlock-family.templ", 'R{"cost"}min=? [F "done"]'),
     edge_case("deadlock-family.templ", 'R{"cost"}max=? [F "done"]'),
     edge_case("deadlock-family.templ", 'P>=0.4 [F "goal"]', 'R{"cost"}<=1.5 [F "done"]'),
+    # conditional properties: a policy with memory does better than any design, and a design that never reaches the condition satisfies nothing
+    case("tests/conditional", "sketch.props"),
+    case("tests/conditional", ['P>=0.5 [F "goal" || F "condition"]']),
+    case("tests/conditional", ['P>0.5 [F "goal" || F "condition"]']),
+    conditional_case('Pmin=? [F "goal" || F "condition"]'),
+    conditional_case('Pmax=? [F "goal" || F "condition"]'),
+    conditional_case('P<=0.8 [F "goal" || F "condition"]'),
+    conditional_case('P>=0.5 [F "goal" || F "condition"]'),
+    conditional_case('P<0.25 [F "goal" || F "condition"]'),
+    conditional_case('P>=0.25 [F "goal" || F "condition"]', 'R{"steps"}min=? [F "goal"]'),
+    # around Storm's problems with conditional properties
+    conditional_case('Pmin=? [F "goal" || F "condition"]', sketch_name="goal-first.templ"),
+    conditional_case('Pmin=? [F "goal" || F "condition"]', sketch_name="almost-sure-condition.templ"),
+    conditional_case('P<=0.75 [F "goal" || F "condition"]', sketch_name="almost-sure-condition.templ"),
+    conditional_case('P>=-0.1 [F "goal" || F "condition"]', sketch_name="threshold.templ"),
+    conditional_case('P>=-0.1 [F "goal" || F "condition"]', 'Pmin=? [F "goal" || F "condition"]', sketch_name="threshold.templ"),
 ]
 
 

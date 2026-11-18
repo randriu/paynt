@@ -33,6 +33,7 @@ The models in `models/tests`. "Designs" is the size of the parameter space.
 | `max-reward-infinite-designs` | DTMC sketch | 4 / 5 | 1 / 2 | `R{"cost"}max`; `lower.props`: `R>=2.5` | an infinite maximum over the designs |
 | `constraint-decided-by-one-design` | DTMC sketches | 3 / 5; 4 / 8 (`hybrid.templ`) | 1 / 3 | a probability and a cost constraint | a constraint satisfied by the best design, not by all |
 | `edge-cases` | DTMC sketches; `policy-tree-*.templ`, `step-bounded-family.templ`: MDP families | 3-5 / 3-19 | 1-3 / 1-12 | none: the properties are in `soundness/test_engines.py` and the tests that use them | thresholds equal to a value, goals reached at once or never, degenerate holes, designs that reach a state without a command (skipped), a policy stuck in one environment (robust synthesis), a zero-cost loop that misleads Storm's scheduler, until formulas that differ from reaching the goal, policy-tree merges and a game that cycles, step-bounded properties |
+| `conditional` | DTMC sketches | 5 / 8; 5 / 9 (`undefined.templ`) | 1 / 2; 1 / 3 | `Pmax=? [F "goal" \|\| F "condition"]`; the others in `soundness/test_engines.py` and `utils/test_conditional.py` | conditional properties: a policy with memory does better than any design (`--conditional-parameters per-phase`), a design that never reaches the condition; `goal-first.templ`, `almost-sure-condition.templ` and `threshold.templ` get around Storm's problems with them; `initial-state-2.drn`: an MDP whose initial state is not state 0 |
 | `prob-goal` | DTMC sketch; `family.templ`: MDP family | 4 / 5; 3 / 6 | 1 / 2; 1 / 3 | `P>=0 [F "goal"]` | the prob0/prob1 constraint |
 | `mdp-family-avoid-8-2-easy` | MDP family | 21169 / 89776 | 6 / 3584 | `P>0.9` | policy trees, families in SMPMC, the coloring builder |
 | `mdp-family-rocks-4-2` | MDP family | 162 / 594 | 4 / 81 | `P>=1`; `max.props`: `Pmax` | robust SMPMC |
@@ -53,7 +54,7 @@ Where the answers the tests expect come from:
   - `mdp-family-correlated`: worst cases 0.45 and 0.36, worked out in its sketch
   - `smpmc-tiny`: `Pmax` 1.0, with x1=4
   - `time-energy`: the trips of 4 hours, (0,2), (1,1) and (2,0); `tree.props` needs a tree of depth 1; `optimality.props`: 4 units of energy
-  - `constraint-decided-by-one-design` and `edge-cases`: in the comments of the sketches
+  - `constraint-decided-by-one-design`, `edge-cases` and `conditional`: in the comments of the sketches
 - all designs checked one by one: `tests/helpers/reference.py`, with Storm in exact arithmetic; `soundness/test_reference.py` checks it against the answers by hand
 - another engine: the decision-tree optima, where AR and SMPMC agree
 - solver output, so a regression check only:

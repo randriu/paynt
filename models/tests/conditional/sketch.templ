@@ -1,0 +1,23 @@
+// x=0 never reaches the goal after the condition (0), x=1 does half the time (1/2). A policy that sets x anew once the condition is reached can take
+// x=0 in s=0 and x=1 in s=1, and always reaches the goal (1): with --conditional-parameters per-phase, x=0 and x@condition=1.
+dtmc
+
+hole int x in {0,1};
+
+module tree
+    s : [0..4] init 0;
+
+    [] s=0 & x=0 -> (s'=1);
+    [] s=0 & x=1 -> (s'=2);
+
+    [] s=1 & x=0 -> (s'=4);
+    [] s=1 & x=1 -> (s'=3);
+
+    [] s=2 & x=0 -> (s'=4);
+    [] s=2 & x=1 -> 1/2 : (s'=3) + 1/2 : (s'=4);
+
+    [] s>2 -> true;
+endmodule
+
+label "goal" = s=3;
+label "condition" = s=1 | s=2;
