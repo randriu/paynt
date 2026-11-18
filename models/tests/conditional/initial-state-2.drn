@@ -1,0 +1,22 @@
+// the initial state is state 2: a reaches the goal after the condition (value 1), b the condition alone (value 0)
+@type: MDP
+@parameters
+
+@reward_models
+
+@nr_states
+3
+@nr_choices
+4
+@model
+state 0 goal condition
+	action 0
+		0 : 1
+state 1 condition
+	action 0
+		1 : 1
+state 2 init
+	action 0
+		0 : 1
+	action 1
+		1 : 1

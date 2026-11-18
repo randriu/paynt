@@ -2,12 +2,16 @@
 
 #include <storm/adapters/RationalNumberAdapter.h>
 #include <storm/exceptions/NotSupportedException.h>
+#include <storm/modelchecker/prctl/helper/SparseDtmcPrctlHelper.h>
+#include <storm/modelchecker/results/ExplicitQuantitativeCheckResult.h>
 #include <storm/models/sparse/ChoiceLabeling.h>
 #include <storm/models/sparse/StandardRewardModel.h>
 #include <storm/models/sparse/StateLabeling.h>
 #include <storm/storage/SparseMatrix.h>
 #include <storm/storage/memorystructure/MemoryStructure.h>
 #include <storm/storage/sparse/ModelComponents.h>
+#include <storm/solver/SolveGoal.h>
+#include <storm/utility/ExtendedNumber.h>
 #include <storm/utility/graph.h>
 #include <storm/utility/macros.h>
 
@@ -169,9 +173,60 @@ namespace synthesis {
     }
 
     template<typename ValueType>
-    std::shared_ptr<storm::models::sparse::Mdp<ValueType>> dtmcAsMdp(storm::models::sparse::Dtmc<ValueType> const& dtmc) {
-        storm::storage::sparse::ModelComponents<ValueType> components(dtmc.getTransitionMatrix(), dtmc.getStateLabeling(), dtmc.getRewardModels());
-        return std::make_shared<storm::models::sparse::Mdp<ValueType>>(std::move(components));
+    std::shared_ptr<storm::modelchecker::CheckResult> conditionalProbabilities(
+        storm::Environment const& env, storm::models::sparse::Dtmc<ValueType> const& dtmc, storm::storage::BitVector const& target,
+        storm::storage::BitVector const& condition
+    ) {
+        using Helper = storm::modelchecker::helper::SparseDtmcPrctlHelper<ValueType>;
+        auto const& matrix = dtmc.getTransitionMatrix();
+        storm::storage::SparseMatrix<ValueType> backward = dtmc.getBackwardTransitions();
+        uint64_t num_states = dtmc.getNumberOfStates();
+        storm::storage::BitVector all(num_states, true);
+        std::vector<ValueType> reaching_condition =
+            Helper::computeUntilProbabilities(env, storm::solver::SolveGoal<ValueType>(), matrix, backward, all, condition, false).values;
+        std::vector<ValueType> reaching_target =
+            Helper::computeUntilProbabilities(env, storm::solver::SolveGoal<ValueType>(), matrix, backward, all, target, false).values;
+
+        // P(F target & F condition): a path enters one of the two sets first and then has to reach the other one, so the chain stops there and moves to
+        // 'both' with the probability of reaching the other set, to 'neither' otherwise (a sum of probabilities, not a difference that could cancel out)
+        uint64_t const both = num_states;
+        uint64_t const neither = num_states + 1;
+        ValueType const one = storm::utility::one<ValueType>();
+        storm::storage::SparseMatrixBuilder<ValueType> builder(num_states + 2, num_states + 2, 0, true, false);
+        for (uint64_t state = 0; state < num_states; ++state) {
+            if (condition.get(state) || target.get(state)) {
+                // iterative solvers may overshoot
+                ValueType reaching_other = std::min(condition.get(state) ? reaching_target[state] : reaching_condition[state], one);
+                if (!storm::utility::isZero(reaching_other)) {
+                    builder.addNextValue(state, both, reaching_other);
+                }
+                if (!storm::utility::isOne(reaching_other)) {
+                    builder.addNextValue(state, neither, one - reaching_other);
+                }
+            } else {
+                for (auto const& entry : matrix.getRow(state)) {
+                    builder.addNextValue(state, entry.getColumn(), entry.getValue());
+                }
+            }
+        }
+        builder.addNextValue(both, both, one);
+        builder.addNextValue(neither, neither, one);
+        storm::storage::SparseMatrix<ValueType> stopped = builder.build();
+        storm::storage::BitVector both_state(num_states + 2, false);
+        both_state.set(both);
+        std::vector<ValueType> reaching_both = Helper::computeUntilProbabilities(
+            env, storm::solver::SolveGoal<ValueType>(), stopped, stopped.transpose(), storm::storage::BitVector(num_states + 2, true), both_state, false
+        ).values;
+
+        std::vector<storm::utility::ExtendedValueType<ValueType>> values(num_states);
+        for (uint64_t state = 0; state < num_states; ++state) {
+            if (storm::utility::isZero(reaching_condition[state])) {
+                values[state] = storm::utility::positiveInfinity<ValueType>();
+            } else {
+                values[state] = storm::utility::ExtendedValueType<ValueType>(reaching_both[state] / reaching_condition[state]);
+            }
+        }
+        return std::make_shared<storm::modelchecker::ExplicitQuantitativeCheckResult<ValueType>>(std::move(values));
     }
 
     template<typename ValueType>
@@ -302,9 +357,12 @@ namespace synthesis {
         storm::models::sparse::Mdp<storm::RationalNumber> const&, storm::storage::Scheduler<storm::RationalNumber> const&, storm::storage::BitVector const&,
         storm::storage::BitVector const&, std::vector<uint64_t> const&
     );
-    template std::shared_ptr<storm::models::sparse::Mdp<double>> dtmcAsMdp<double>(storm::models::sparse::Dtmc<double> const&);
-    template std::shared_ptr<storm::models::sparse::Mdp<storm::RationalNumber>> dtmcAsMdp<storm::RationalNumber>(
-        storm::models::sparse::Dtmc<storm::RationalNumber> const&
+    template std::shared_ptr<storm::modelchecker::CheckResult> conditionalProbabilities<double>(
+        storm::Environment const&, storm::models::sparse::Dtmc<double> const&, storm::storage::BitVector const&, storm::storage::BitVector const&
+    );
+    template std::shared_ptr<storm::modelchecker::CheckResult> conditionalProbabilities<storm::RationalNumber>(
+        storm::Environment const&, storm::models::sparse::Dtmc<storm::RationalNumber> const&, storm::storage::BitVector const&,
+        storm::storage::BitVector const&
     );
     template std::tuple<std::shared_ptr<storm::models::sparse::Mdp<double>>, std::vector<uint64_t>, std::vector<uint64_t>> unfoldConditionalPhases<double>(
         storm::models::sparse::Mdp<double> const&, storm::storage::BitVector const&, storm::storage::BitVector const&

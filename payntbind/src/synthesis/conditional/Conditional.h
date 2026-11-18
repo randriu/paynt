@@ -1,5 +1,7 @@
 #pragma once
 
+#include <storm/environment/Environment.h>
+#include <storm/modelchecker/results/CheckResult.h>
 #include <storm/models/sparse/Dtmc.h>
 #include <storm/models/sparse/Mdp.h>
 #include <storm/models/sparse/Model.h>
@@ -48,11 +50,16 @@ namespace synthesis {
     );
 
     /**
-     * The Markov chain as an MDP with one choice per state, checked by Storm's procedure for MDPs: its procedure for conditional properties of Markov chains
-     * (Storm 2.0) fails on some.
+     * P[F target || F condition] of a Markov chain in every state, as Storm's model checker returns it: +infinity where condition is unreachable.
+     *
+     * Computed from reachability probabilities alone: Storm's procedure for conditional properties of Markov chains (Storm 2.0) crashes on some, and the one
+     * for MDPs gives the value of the initial state only.
      */
     template<typename ValueType>
-    std::shared_ptr<storm::models::sparse::Mdp<ValueType>> dtmcAsMdp(storm::models::sparse::Dtmc<ValueType> const& dtmc);
+    std::shared_ptr<storm::modelchecker::CheckResult> conditionalProbabilities(
+        storm::Environment const& env, storm::models::sparse::Dtmc<ValueType> const& dtmc, storm::storage::BitVector const& target,
+        storm::storage::BitVector const& condition
+    );
 
     /**
      * The product of an MDP with the phases of P[F target || F condition]: each state paired with the phase of the paths that enter it. Phases 1 and 2 are

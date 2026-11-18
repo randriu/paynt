@@ -47,11 +47,12 @@ def model_check(
     """Check prop on mdp: in its direction (the best case), or with alt in the opposite one (the worst case).
 
     The value is undefined if the condition is not reached: in the best case, if no scheduler reaches it; in the worst case, if one avoids it, as it then
-    violates prop. A constraint is checked on an MDP with its bound, so that Storm decides the threshold without computing the value, which is much faster.
-    A Markov chain is checked as an MDP: Storm's procedure for Markov chains crashes on some. A bound outside (0, 1), which Storm's threshold decision may never
-    finish deciding, is compared with the value.
+    violates prop. The result of a Markov chain (a design) has the value of every state, +infinity where the condition is unreachable, as Storm gives it; that
+    of an MDP, the value of the initial state only, as Storm computes no more. A constraint is checked on an MDP with its bound, so that Storm decides the
+    threshold without computing the value, which is much faster; a bound outside (0, 1), which Storm's threshold decision may never finish deciding, is compared
+    with the value.
     """
-    _target, condition = target_and_condition(mdp.model, prop)
+    target, condition = target_and_condition(mdp.model, prop)
     if alt:
         undefined = payntbind.synthesis.some_scheduler_avoids(mdp.model, condition)
     else:
@@ -59,16 +60,19 @@ def model_check(
     if undefined:
         return paynt.specification.property_result.PropertyResult(prop, None, None, sat=False)
 
+    if stormpy.models.SparseDtmc.is_instantiation(mdp.model):
+        result = payntbind.synthesis.conditional_probabilities(paynt.specification.property.Property.environment, mdp.model, target, condition)
+        return paynt.specification.property_result.PropertyResult(prop, result, result.get_value(mdp.initial_state))
     if isinstance(prop, paynt.specification.property.OptimalityProperty) or mdp.is_deterministic or not 0 < prop.threshold < 1:
         formula = prop.formula_alt if alt else prop.formula
     else:
         formula = prop.formula_with_bound_alt if alt else prop.formula_with_bound
-    model = payntbind.synthesis.dtmc_as_mdp(mdp.model) if stormpy.models.SparseDtmc.is_instantiation(mdp.model) else mdp.model
-    result = paynt.specification.property.Property.model_check(model, formula, only_initial_states=True)
+    result = paynt.specification.property.Property.model_check(mdp.model, formula, only_initial_states=True)
     if result.is_quantitative():
         # Storm computes the value with the bound as well when it is easy to find
         return paynt.specification.property_result.PropertyResult(prop, result, result.get_value(mdp.initial_state))
-    return paynt.specification.property_result.PropertyResult(prop, result, None, sat=result.get_truth_values_vector().get(mdp.initial_state))
+    # by state: the truth values of a result for some states are stored one per such state, so the vector of a result for the initial state alone has one
+    return paynt.specification.property_result.PropertyResult(prop, result, None, sat=result[mdp.initial_state])
 
 
 def scheduler_choices(mdp: paynt.model.model.SubMdp, prop: paynt.specification.property.Property, scheduler: Any) -> dict[int, int]:
