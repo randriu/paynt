@@ -23,8 +23,8 @@ FIRST_SEED = int(os.environ.get("PAYNT_RANDOM_FIRST_SEED", "0"))
 
 
 def random_sketch(rng):
-    """The text of a random DTMC sketch with an absorbing goal, maybe an absorbing sink and states that some options of a hole leave without a command, and a
-    state to avoid (labels "avoid" and "safe")."""
+    """The text of a random DTMC sketch with an absorbing goal, maybe an absorbing sink and states that some options of a hole leave without a command, a state
+    to avoid (labels "avoid" and "safe") and one or two states of a condition."""
     num_states = rng.randint(3, 6)
     goal = num_states - 1
     absorbing = {goal, goal - 1} if rng.random() < 0.5 else {goal}
@@ -51,7 +51,8 @@ def random_sketch(rng):
             lines.append(f"    [{action}] {guard} -> {distribution};")
             rewards.append(f"    [{action}] true : {rng.randint(0, 3)};")
     avoid = rng.randrange(goal)
-    labels = [f'label "goal" = s={goal};', f'label "avoid" = s={avoid};', f'label "safe" = s!={avoid};']
+    condition = " | ".join(f"s={state}" for state in rng.sample(range(num_states), rng.randint(1, 2)))
+    labels = [f'label "goal" = s={goal};', f'label "avoid" = s={avoid};', f'label "safe" = s!={avoid};', f'label "condition" = {condition};']
     lines += ["endmodule", "", *labels, "", 'rewards "cost"', *rewards, "endrewards", ""]
     return "\n".join(lines)
 
@@ -70,10 +71,10 @@ def as_decimal(number):
 
 def random_specification(rng, sketch_path):
     """Properties on the goal: one or two constraints, an objective, or an objective with a constraint; a probability may be of reaching the goal without the
-    state to avoid."""
-    path = rng.choice(['F "goal"', '!"avoid" U "goal"', '"safe" U "goal"'])
-    # every design may be skipped
-    probabilities = [design.values[0] for design in Reference(sketch_path, [f"P=? [{path}]"]).designs] or [Fraction(0)]
+    state to avoid, or of reaching it given that the condition is reached."""
+    path = rng.choice(['F "goal"', '!"avoid" U "goal"', '"safe" U "goal"', 'F "goal" || F "condition"'])
+    # every design may be skipped, or never reach the condition
+    probabilities = [design.values[0] for design in Reference(sketch_path, [f"P=? [{path}]"]).designs if design.values[0] is not None] or [Fraction(0)]
     costs = [design.values[0] for design in Reference(sketch_path, ['R{"cost"}=? [F "goal"]']).designs]
     finite_costs = [cost for cost in costs if cost != float("inf")] or [Fraction(0)]
     probability = f"P{rng.choice(['>=', '>', '<=', '<'])}{as_decimal(threshold(rng, probabilities))} [{path}]"

@@ -141,6 +141,7 @@ class ColoredMdpTheory:
             if eta.size == 1:
                 sub_mdp = self.colored_mdp.build_assignment(eta)
                 paynt.utils.error_handling.require_markov_chain_for_robust_search(sub_mdp, self.policy_parameters)
+                paynt.utils.error_handling.require_markov_chain_for_conditional(sub_mdp, [self.prop])
             else:
                 # No parent_selected_choices reuse hint: it assumes nested parameter spaces (true for AR's splitting), which Z3's CDCL backtracking does not
                 # give.

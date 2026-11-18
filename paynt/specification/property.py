@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 def construct_property(prop: Any, relative_error: float, use_exact: bool = False) -> Property:
     rf = prop.get_raw_formula()
+    paynt.utils.error_handling.require_conditional_reachability(rf)
     player_index = None
     if rf.is_reward_operator_formula and use_exact:
         raise ValueError("exact synthesis is not supported for reward properties")
@@ -75,6 +76,17 @@ def construct_specification(stormpy_properties: list[Any], relative_error: float
     return Specification(properties)
 
 
+#: --conditional-algorithm: Storm's algorithms for conditional properties that give a scheduler (policy iteration gives none)
+CONDITIONAL_ALGORITHMS = {
+    "default": stormpy.environments.ConditionalAlgorithmSetting.DEFAULT,
+    "restart": stormpy.environments.ConditionalAlgorithmSetting.RESTART,
+    "bisection": stormpy.environments.ConditionalAlgorithmSetting.BISECTION,
+    "bisection-advanced": stormpy.environments.ConditionalAlgorithmSetting.BISECTION_ADVANCED,
+    "bisection-pt": stormpy.environments.ConditionalAlgorithmSetting.BISECTION_PT,
+    "bisection-advanced-pt": stormpy.environments.ConditionalAlgorithmSetting.BISECTION_ADVANCED_PT,
+}
+
+
 class Property:
     """Wrapper over a stormpy property."""
 
@@ -88,6 +100,8 @@ class Property:
     # TODO once Storm has a new release we should be able to check for convergence
     # --sound: apply no iteration caps
     sound: bool = False
+    # --conditional-algorithm: Storm's algorithm for conditional properties (see CONDITIONAL_ALGORITHMS)
+    conditional_algorithm: str = "default"
 
     @classmethod
     def set_model_checking_precision(cls, precision: float) -> None:
@@ -95,6 +109,9 @@ class Property:
         assert cls.environment is not None, "Property.initialize must be called before setting precision"
         cls.environment.solver().native().precision = stormpy.Rational(precision)
         cls.environment.solver().min_max().precision = stormpy.Rational(precision)
+        conditional = cls.environment.modelchecker().conditional()
+        conditional.precision = stormpy.Rational(precision)
+        conditional.relative_precision = False
 
     @classmethod
     def initialize(cls, use_exact: bool = False) -> None:
@@ -114,10 +131,14 @@ class Property:
         else:
             se.min_max().method = stormpy.environments.MinMaxMethod.OPTIMISTIC_VALUE_ITERATION
 
+        cls.environment.modelchecker().conditional().algorithm = CONDITIONAL_ALGORITHMS[cls.conditional_algorithm]
+
     @classmethod
-    def model_check(cls, model: Any, formula: Any) -> Any:
+    def model_check(cls, model: Any, formula: Any, only_initial_states: bool = False) -> Any:
         # a POMDP is checked as its underlying MDP (stormpy refuses partially observable models unless asked to)
-        return stormpy.model_checking(model, formula, extract_scheduler=True, force_fully_observable=True, environment=cls.environment)
+        return stormpy.model_checking(
+            model, formula, only_initial_states=only_initial_states, extract_scheduler=True, force_fully_observable=True, environment=cls.environment
+        )
 
     @classmethod
     def compute_expected_visits(cls, model: Any) -> list[float]:
@@ -175,6 +196,11 @@ class Property:
         else:
             self.formula.set_optimality_type(stormpy.logic.OptimizationDirection.MAXIMIZE)
         self.formula_alt = Property.alt_formula(self.formula)
+        # with the bound kept, Storm decides the threshold and may skip computing the value (it does for a conditional property, see
+        # paynt.utils.conditional.model_check)
+        self.formula_with_bound = rf.clone()
+        self.formula_with_bound.set_optimality_type(self.formula.optimality_type)
+        self.formula_with_bound_alt = Property.alt_formula(self.formula_with_bound)
 
     @staticmethod
     def alt_formula(formula: Any) -> Any:
@@ -222,6 +248,11 @@ class Property:
     @property
     def is_until(self) -> bool:
         return self.formula.subformula.is_until_formula
+
+    @property
+    def is_conditional(self) -> bool:
+        """Whether this is a conditional reachability property P[F target || F condition], see paynt.utils.conditional."""
+        return isinstance(self.formula.subformula, stormpy.logic.ConditionalFormula)
 
     @property
     def is_step_bounded(self) -> bool:
@@ -277,8 +308,9 @@ class Property:
         return new_property
 
     def result_valid(self, value: Any) -> bool:
-        """Whether the value of a single design is valid: an infinite reward means the design does not surely reach the target."""
-        return not self.reward or value != math.inf
+        """Whether the value of a single design is valid: an infinite reward means the design does not surely reach the target, and None (the value of a
+        conditional property is undefined) that it does not reach the condition."""
+        return value is not None and (not self.reward or value != math.inf)
 
     def best_case_is_unknown(self, value: Any) -> bool:
         """Whether value, the best case of this property over several designs, says nothing about them.

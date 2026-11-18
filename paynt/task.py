@@ -29,6 +29,7 @@ class SynthesisTask:
         costs_file_path: str | None = None,
         forall_pattern: str | None = None,
         verify_robust: bool = False,
+        conditional_parameters: str = "shared",
     ):
         self.specification = paynt.specification.property.construct_specification(properties, relative_error, use_exact)
         self.timeout = timeout
@@ -46,6 +47,8 @@ class SynthesisTask:
         self.forall_pattern = forall_pattern
         # SMPMC: independently verify a robust result with AR on the negated specification
         self.verify_robust = verify_robust
+        # see paynt.utils.conditional.CONDITIONAL_PARAMETERS
+        self.conditional_parameters = conditional_parameters
 
     @classmethod
     def from_specification(
@@ -61,6 +64,7 @@ class SynthesisTask:
         costs_file_path: str | None = None,
         forall_pattern: str | None = None,
         verify_robust: bool = False,
+        conditional_parameters: str = "shared",
         **kwargs: Any,
     ) -> SynthesisTask:
         """Wrap an already-constructed Specification directly, bypassing property parsing.
@@ -89,6 +93,7 @@ class SynthesisTask:
         task.costs_file_path = costs_file_path
         task.forall_pattern = forall_pattern
         task.verify_robust = verify_robust
+        task.conditional_parameters = conditional_parameters
         return task
 
     def get_property(self) -> paynt.specification.property.Property:

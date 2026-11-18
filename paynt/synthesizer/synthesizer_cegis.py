@@ -26,6 +26,9 @@ class SynthesizerCEGIS(paynt.synthesizer.synthesizer.Synthesizer):
             "its counterexamples need an until or reachability formula without a step bound",
             "use --method onebyone or smpmc",
         )
+        paynt.utils.error_handling.require_no_conditional(
+            task.specification, "CEGIS (also inside hybrid)", "it has no counterexamples for them; use --method ar, onebyone or smpmc"
+        )
 
         # the DTMC conflict generator, or the MDP one for an assignment whose model still has nondeterminism
         self.conflict_generator = paynt.synthesizer.conflict_generator.auto.ConflictGeneratorAuto(colored_mdp, task)

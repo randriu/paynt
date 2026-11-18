@@ -6,6 +6,7 @@ import stormpy
 
 import paynt.specification.property
 import paynt.specification.property_result
+import paynt.utils.conditional
 import paynt.utils.error_handling
 
 import payntbind
@@ -45,6 +46,8 @@ class Mdp:
         return self.model.initial_states[0]
 
     def model_check_property(self, prop: paynt.specification.property.Property, alt: bool = False) -> paynt.specification.property_result.PropertyResult:
+        if prop.is_conditional:
+            return paynt.utils.conditional.model_check(self, prop, alt)
         formula = prop.formula if not alt else prop.formula_alt
         result = paynt.specification.property.Property.model_check(self.model, formula)
         value = result.get_value(self.initial_state)
@@ -60,6 +63,7 @@ class Mdp:
         would each be given a policy of their own instead of a common one, so only a single property is supported for such a model.
         """
         paynt.utils.error_handling.require_single_property_on_nondeterministic_model(self, spec)
+        paynt.utils.error_handling.require_markov_chain_for_conditional(self, spec.all_properties())
         if constraint_indices is None:
             constraint_indices = spec.all_constraint_indices()
         results: list[paynt.specification.property_result.PropertyResult | None] = [None for _ in spec.constraints]

@@ -121,3 +121,11 @@ def test_profiling_prints_the_share_of_the_most_expensive_calls(run_paynt):
     assert any(re.search(r"\.py:\d+\(\w+\)$", line) for line in lines)
     assert any("<built-in method" in line for line in lines)
     assert not any("~:" in line or "None" in line for line in lines)
+
+
+def test_conditional_parameters_per_phase_give_a_copy_of_x_for_after_the_condition(run_paynt, caplog):
+    """In models/tests/conditional, x=0 first and then x=1 after the condition always reaches the goal."""
+    caplog.set_level("INFO")
+    run_paynt("tests/conditional", "--conditional-parameters", "per-phase", "--conditional-algorithm", "restart")
+    assert "optimum: 1.0" in caplog.text
+    assert "x=0, x@condition=1" in caplog.messages

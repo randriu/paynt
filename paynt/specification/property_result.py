@@ -8,16 +8,25 @@ from paynt.specification.property import Property, OptimalityProperty, Specifica
 
 
 class PropertyResult:
-    def __init__(self, prop: Property, result: Any, value: Any):
+    def __init__(self, prop: Property, result: Any, value: Any, sat: bool = False):
+        """:param value: None if there is no value: Storm decided the threshold without computing it, or the value of a conditional property is undefined
+            (see paynt.utils.conditional)
+        :param sat: without a value, whether the threshold is satisfied (not if the value is undefined)
+        """
         self.result = result
-        # a no-op (factor 1.0) for every property except a Cassandra-derived discounted-reward one -- see
-        # Property.discount_correction_factor
-        self.value = value * prop.discount_correction_factor
-        self.sat = prop.satisfies_threshold(self.value)
+        # only for a Cassandra-derived discounted-reward property, see Property.discount_correction_factor (a float factor, which an exact value would not take)
+        if value is not None and prop.discount_factor_correction is not None:
+            value = value * prop.discount_correction_factor
+        self.value = value
+        self.sat = prop.satisfies_threshold(self.value) if value is not None else sat
         self.improves_optimum: bool | None = None if not isinstance(prop, OptimalityProperty) else prop.improves_optimum(self.value)
 
     def __str__(self) -> str:
-        return str(self.value)
+        if self.value is not None:
+            return str(self.value)
+        if self.result is None:
+            return "undefined"
+        return "satisfied" if self.sat else "violated"
 
 
 class ConstraintsResult:

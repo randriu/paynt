@@ -10,6 +10,7 @@ import paynt.synthesizer.synthesizer
 import paynt.synthesizer.search_node
 import paynt.specification.property_result
 import paynt.model.model
+import paynt.utils.conditional
 import paynt.utils.error_handling
 import paynt.utils.scoring
 
@@ -22,6 +23,9 @@ def scheduler_scores(
     colored_mdp: paynt.colored_mdp.ColoredMdp, task: paynt.task.SynthesisTask, mdp: Any, prop: Any, result: Any, selection: list[list[int]]
 ) -> dict[int, float] | None:
     inconsistent_assignments = {parameter: options for parameter, options in enumerate(selection) if len(options) > 1}
+    if prop.is_conditional:
+        # Storm gives no state values for it
+        return paynt.utils.conditional.backward_scores(colored_mdp, mdp, prop, result.get_scheduler(), inconsistent_assignments)
     choice_values = paynt.model.model.ModelIndex.choice_values(mdp.model, prop, result.get_value_vector())
     choices = result.get_scheduler().compute_action_support(mdp.model.nondeterministic_choice_indices)
     expected_visits = paynt.model.model.ModelIndex.compute_expected_visits(mdp.model, prop, choices, disable_expected_visits=task.disable_expected_visits)
@@ -68,7 +72,7 @@ def set_design_apart(
         is halved
     """
     assert node.mdp is not None
-    used = colored_mdp.scheduler_selection(node.mdp, result.primary.result.get_scheduler()) if result is not None else []
+    used = colored_mdp.scheduler_selection(node.mdp, result.primary.result.get_scheduler(), result.prop) if result is not None else []
     splitters = [parameter for parameter, options in enumerate(used) if options and node.parameter_space.parameter_num_options(parameter) > 1]
     if not splitters:
         # every design of the node agrees with it where it matters, though the model has not collapsed into one design yet
@@ -197,7 +201,7 @@ class SynthesizerAR(paynt.synthesizer.synthesizer.Synthesizer):
                 continue
 
             # a design the best case comes from may satisfy the whole specification, which says nothing about the other designs
-            result.primary_selection, consistent = self.colored_mdp.scheduler_is_consistent(mdp, node, result.primary.result, spec)
+            result.primary_selection, consistent = self.colored_mdp.scheduler_is_consistent(mdp, node, result.primary.result, spec, constraint)
             assignment = node.parameter_space.assume_options_copy(result.primary_selection) if consistent else None
             design = self.build_design(assignment) if assignment is not None else None
             if design is not None:
@@ -263,7 +267,7 @@ class SynthesizerAR(paynt.synthesizer.synthesizer.Synthesizer):
 
         result.can_improve = True
         if several_designs:
-            result.primary_selection, consistent = self.colored_mdp.scheduler_is_consistent(mdp, node, result.primary.result, spec)
+            result.primary_selection, consistent = self.colored_mdp.scheduler_is_consistent(mdp, node, result.primary.result, spec, opt)
             if not consistent:
                 return result
             assignment = node.parameter_space.assume_options_copy(result.primary_selection)
@@ -286,6 +290,9 @@ class SynthesizerAR(paynt.synthesizer.synthesizer.Synthesizer):
         elif several_designs and not opt.result_valid(value):
             # it never surely reaches the target, the other designs may: the best case is infinite, or Storm's scheduler for a finite one is not the best (for
             # a minimized reward it can pick a choice that leaves the target unreachable)
+            pass
+        elif several_designs and opt.is_conditional and not paynt.utils.conditional.attains_best_case(opt, result.primary.value, value):
+            # Storm's scheduler for a conditional property is not the best one, so other designs may do better
             pass
         elif not opt.improves_optimum(value) or not several_designs or mdp.is_deterministic:
             # it does not improve the optimum, so no design does; or the designs all behave like it

@@ -43,6 +43,7 @@ def get_synthesizer(
     import paynt.utils.error_handling
 
     feature_kind = colored_mdp_factory.feature_kind
+    paynt.utils.error_handling.require_plain_sketch_for_conditional(task.specification, feature_kind)
 
     if feature_kind == "pomdp_family":
         # a family-of-POMDPs sketch isn't run through a Synthesizer at all (see e.g.
@@ -85,4 +86,9 @@ def get_synthesizer(
 
         return paynt.pomdp.posmg.PosmgSynthesizer(colored_mdp_factory, task, method)
 
-    return paynt.synthesizer.synthesizer.Synthesizer.for_method(colored_mdp_factory.build(), task, method)
+    colored_mdp = colored_mdp_factory.build()
+    if task.conditional_parameters == "per-phase":
+        import paynt.utils.conditional
+
+        colored_mdp = paynt.utils.conditional.unfold_phases(colored_mdp, task.specification)
+    return paynt.synthesizer.synthesizer.Synthesizer.for_method(colored_mdp, task, method)

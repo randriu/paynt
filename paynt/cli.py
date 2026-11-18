@@ -8,6 +8,8 @@ import paynt.api
 import paynt.utils.timer
 import paynt.utils.version_check
 import paynt.parser.sketch
+import paynt.specification.property
+import paynt.utils.conditional
 
 import paynt.pomdp
 import paynt.dt._cli
@@ -92,6 +94,23 @@ def setup_logger(log_path: str | None = None) -> list[logging.Handler]:
     panel="Synthesis",
     help="do not cap value/policy iteration: never uses an unconverged model checking result, but a slowly converging solve may run indefinitely",
 )
+@click.option(
+    "--conditional-algorithm",
+    type=click.Choice(list(paynt.specification.property.CONDITIONAL_ALGORITHMS)),
+    default="default",
+    show_default=True,
+    panel="Synthesis",
+    help="Storm's algorithm for conditional properties P[F target || F condition]",
+)
+@click.option(
+    "--conditional-parameters",
+    type=click.Choice(paynt.utils.conditional.CONDITIONAL_PARAMETERS),
+    default="shared",
+    show_default=True,
+    panel="Synthesis",
+    help="for a conditional property: one parameter assignment for the whole run, or a copy of the parameters for after the condition and after the target "
+    "is reached (each phase may choose them anew)",
+)
 @click.option("--timeout", type=int, panel="Synthesis", help="timeout (s)")
 @click.option(
     "--method", type=click.Choice(["onebyone", "ar", "cegis", "hybrid", "smpmc"]), default="ar", show_default=True, panel="Synthesis", help="synthesis method"
@@ -142,6 +161,8 @@ def paynt_run(
     precision: float,
     exact: bool,
     sound: bool,
+    conditional_algorithm: str,
+    conditional_parameters: str,
     timeout: int | None,
     export: str | None,
     method: str,
@@ -204,6 +225,7 @@ def paynt_run(
         "costs_file_path": os.path.join(project, "sketch.costs"),
         "forall_pattern": smpmc_forall,
         "verify_robust": smpmc_verify_robust,
+        "conditional_parameters": conditional_parameters,
     }
 
     storm_control = None
@@ -214,7 +236,16 @@ def paynt_run(
     sketch_path = os.path.join(project, sketch)
     properties_path = os.path.join(project, props)
     colored_mdp_factory, task = paynt.parser.sketch.Sketch.load_sketch(
-        sketch_path, properties_path, export, relative_error, precision, constraint_bound, exact, task_kwargs=task_kwargs, sound=sound
+        sketch_path,
+        properties_path,
+        export,
+        relative_error,
+        precision,
+        constraint_bound,
+        exact,
+        task_kwargs=task_kwargs,
+        sound=sound,
+        conditional_algorithm=conditional_algorithm,
     )
     synthesizer = paynt.api.get_synthesizer(colored_mdp_factory, task, method, fsc_synthesis, storm_control, dtnest)
     synthesizer.run(optimum_threshold)

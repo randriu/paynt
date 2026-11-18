@@ -1,0 +1,16 @@
+// Both designs have value 1: every path that reaches the condition (s=4) then reaches the goal. Storm 2.0 crashes on the Markov chain of x=0 (its states are
+// numbered so that the goal comes before the condition), see paynt.utils.conditional.model_check.
+dtmc
+
+hole int x in {0,1};
+
+module m
+    s : [0..5] init 0;
+    [] s=0 & x=0 -> 1/2 : (s'=5) + 1/2 : (s'=4);
+    [] s=0 & x=1 -> (s'=4);
+    [] s=4 -> (s'=5);
+    [] s=5 -> true;
+endmodule
+
+label "goal" = s=5;
+label "condition" = s=4;

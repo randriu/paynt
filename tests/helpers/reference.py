@@ -2,8 +2,9 @@
 
 The holes of the sketch are replaced by constants, one design at a time, so none of PAYNT's parsing, coloring or search is involved. A design of an MDP sketch
 is an MDP, and each property is checked in its own direction: the best policy for it. As in PAYNT, a design whose expected reward is infinite (it does not reach
-the goal for sure) satisfies no reward property, and a design whose holes leave a state it reaches without a command is skipped if another design has a command
-there, whether that design reaches the state or not (a state with a command in no design keeps the self-loop that Storm gives it).
+the goal for sure) satisfies no reward property, nor does one that never reaches the condition of a conditional property (its value is undefined), and a design
+whose holes leave a state it reaches without a command is skipped if another design has a command there, whether that design reaches the state or not (a state
+with a command in no design keeps the self-loop that Storm gives it).
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from fractions import Fraction
 
 import stormpy
 
+DTMC = re.compile(r"^\s*dtmc\s*$")
 HOLE = re.compile(r"^\s*hole\s+(\w+)\s+(\w+)\s+in\s+\{(.*?)\}\s*;")
 # a variable declaration with its initial value
 INITIAL_VALUE = re.compile(r"^(\s*(?:global\s+)?\w+\s*:\s*(?:\[[^\]]*\]|bool|int))\s+init\s+[^;]+;")
@@ -53,6 +55,7 @@ class Property:
     text: str
     reward: bool
     maximizing: bool
+    conditional: bool
     # for a constraint, its comparison and threshold; None for the objective
     compare: object = None
     threshold: Fraction | None = None
@@ -62,7 +65,7 @@ class Property:
         return self.compare is None
 
     def valid(self, value):
-        return not (self.reward and value == math.inf)
+        return value is not None and not (self.reward and value == math.inf)
 
     def holds(self, value):
         return self.valid(value) and self.compare(value, self.threshold)
@@ -71,7 +74,7 @@ class Property:
 @dataclass(frozen=True)
 class Design:
     options: tuple
-    # one value per property: a Fraction, or math.inf for an infinite reward
+    # one value per property: a Fraction, math.inf for an infinite reward, or None for a conditional property whose condition is never reached
     values: tuple
     # the valuations of the states it reaches and that have no command, and of every state that has one
     deadlocks: frozenset = frozenset()
@@ -86,6 +89,7 @@ def _formula(prop):
     formula = prop.get_raw_formula().clone()
     text = str(formula)
     reward = formula.is_reward_operator_formula
+    conditional = isinstance(formula.subformula, stormpy.logic.ConditionalFormula)
     if formula.has_bound:
         compare = COMPARISONS[formula.comparison_type]
         threshold = Fraction(str(formula.threshold_expr.evaluate_as_rational()))
@@ -93,15 +97,30 @@ def _formula(prop):
         maximizing = compare in (operator.gt, operator.ge)
         direction = stormpy.logic.OptimizationDirection.MAXIMIZE if maximizing else stormpy.logic.OptimizationDirection.MINIMIZE
         formula.set_optimality_type(direction)
-        return formula, Property(text, reward, maximizing, compare, threshold)
+        return formula, Property(text, reward, maximizing, conditional, compare, threshold)
     maximizing = formula.has_optimality_type and formula.optimality_type == stormpy.logic.OptimizationDirection.MAXIMIZE
-    return formula, Property(text, reward, maximizing)
+    return formula, Property(text, reward, maximizing, conditional)
 
 
-def _value(model, formula):
+def _value(model, formula, program, mdp):
+    """:param mdp: the model as an MDP, for a conditional property: Storm's procedure for Markov chains crashes on some"""
+    if isinstance(formula.subformula, stormpy.logic.ConditionalFormula):
+        # Storm refuses to compute a conditional probability whose condition is never reached
+        condition = stormpy.parse_properties(f"P=? [{formula.subformula.conditional_subformula}]", program)[0].get_raw_formula()
+        if stormpy.model_checking(model, condition, only_initial_states=True).get_value(model.initial_states[0]) == 0:
+            return None
+        model, formula = mdp, formula.clone()
+        if not formula.has_optimality_type:
+            # one choice per state: the least and the most are the same
+            formula.set_optimality_type(stormpy.logic.OptimizationDirection.MAXIMIZE)
     result = stormpy.model_checking(model, formula, only_initial_states=True)
     value = result.get_value(model.initial_states[0])
     return value if value == math.inf else Fraction(str(value))
+
+
+def _as_mdp(lines):
+    """The lines of a DTMC program as those of an MDP."""
+    return [DTMC.sub("mdp", line) for line in lines]
 
 
 def _valuations(model, states):
@@ -155,7 +174,12 @@ class Reference:
                     stormpy.parse_prism_program(_write(_from_everywhere(design_lines), path), prism_compatibility=True, simplify=False), options=builder_options
                 )
                 live = _valuations(everywhere, [state for state in range(everywhere.nr_states) if state not in everywhere.labeling.get_states("deadlock")])
-                values = tuple(_value(model, formula) for formula in formulas)
+                mdp = None
+                if any(prop.conditional for prop in self.properties):
+                    mdp = stormpy.build_model[stormpy.Rational](
+                        stormpy.parse_prism_program(_write(_as_mdp(design_lines), path), prism_compatibility=True, simplify=False), options=builder_options
+                    )
+                values = tuple(_value(model, formula, program, mdp) for formula in formulas)
                 options = tuple((name, option) for (_, _, name, _), option in zip(holes, combination, strict=True))
                 self.designs.append(Design(options, values, deadlocks, live))
         live = frozenset().union(*(design.live for design in self.designs))

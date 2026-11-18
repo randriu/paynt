@@ -263,3 +263,12 @@ class TestTheResultCarriesTheSelectedChoices:
         result = paynt.synthesizer.synthesizer.Synthesizer.for_method(colored_mdp, task, "onebyone").run()
         assert not result.success
         assert result.selected_choices is None
+
+
+@pytest.mark.parametrize("method", ["onebyone", "ar", "smpmc"])
+def test_a_conditional_property_is_refused(method, tmp_path):
+    """Storm's best policy for it has memory, whereas the choices left are resolved as if by a parameter per state: a design that satisfies it is refused when
+    checked."""
+    colored_mdp, task = TestSeveralPropertiesAreRefused.two_targets('P>=0.5 [F "A" || F ("A" | "B")]', tmp_path)
+    with pytest.raises(NotImplementedError, match="cannot check the conditional property"):
+        paynt.synthesizer.synthesizer.Synthesizer.for_method(colored_mdp, task, method).run()

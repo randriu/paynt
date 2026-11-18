@@ -174,7 +174,7 @@ def _valuation(colored_mdp: paynt.colored_mdp.ColoredMdp, state: int) -> str:
 
 
 def require_eventually(prop: paynt.specification.property.Property) -> None:
-    """Raise NotImplementedError if prop is an until formula that is checked as it is, for code that needs a target to reach.
+    """Raise NotImplementedError if prop is an until formula that is checked as it is, or a conditional property, for code that needs a target to reach.
 
     An until formula `phi1 U phi2` is checked as `F phi2` when no state where neither side holds can reach phi2 (see Property.transform_until_to_eventually);
     otherwise only model checking supports it.
@@ -185,6 +185,8 @@ def require_eventually(prop: paynt.specification.property.Property) -> None:
             "(an until formula is read as reaching its right side when Storm makes such states absorbing, as it does for a model built for this formula alone "
             "with atomic sides)"
         )
+    if prop.is_conditional:
+        raise NotImplementedError(f"{prop} is a conditional property, which this needs as reaching a target")
 
 
 def require_single_property_on_nondeterministic_model(model: paynt.model.model.Mdp, specification: paynt.specification.property.Specification) -> None:
@@ -200,6 +202,55 @@ def require_single_property_on_nondeterministic_model(model: paynt.model.model.M
             "choices enabled (an incomplete coloring, or an MDP family, whose policy is not a parameter), each property would be given a policy of its own for "
             "them, so only a single property is supported"
         )
+
+
+def require_markov_chain_for_conditional(model: paynt.model.model.Mdp, properties: Sequence[paynt.specification.property.Property]) -> None:
+    """Raise NotImplementedError if the model of a design still has nondeterminism and a property is conditional.
+
+    The choices that a design of an incomplete coloring leaves are resolved by model checking, as if each such state had a parameter of its own; Storm's best
+    scheduler for a conditional property has memory, so it may do better than any such resolution.
+    """
+    conditionals = [str(prop).strip() for prop in properties if prop.is_conditional]
+    if conditionals and not model.is_deterministic:
+        raise NotImplementedError(
+            f"cannot check the conditional property {'; '.join(conditionals)} on a model that still has nondeterminism (an incomplete coloring): Storm's best "
+            "scheduler for it has memory, whereas the choices a parameter assignment leaves are to be resolved by a policy without memory"
+        )
+
+
+def require_conditional_reachability(formula: Any) -> None:
+    """Raise NotImplementedError if formula is conditional, but not a conditional reachability probability P[F target || F condition], the only kind supported
+    (see paynt.utils.conditional)."""
+    conditional = getattr(formula, "subformula", None)
+    if not isinstance(conditional, stormpy.logic.ConditionalFormula):
+        return
+    sides = [conditional.main_subformula, conditional.conditional_subformula]
+    if not formula.is_probability_operator_formula or any(type(side) is not stormpy.logic.EventuallyFormula for side in sides):
+        raise NotImplementedError(f"{formula} is not supported: the only conditional properties supported are P[F target || F condition]")
+
+
+def require_no_conditional(specification: paynt.specification.property.Specification, what: str, alternative: str | None = None) -> None:
+    """Raise NotImplementedError if the specification has a conditional property (see paynt.utils.conditional), which `what` (a noun phrase) does not
+    support."""
+    conditionals = [str(prop).strip() for prop in specification.all_properties() if prop.is_conditional]
+    if conditionals:
+        message = f"{what} does not support conditional properties such as {'; '.join(conditionals)}"
+        raise NotImplementedError(message if alternative is None else f"{message}; {alternative}")
+
+
+def require_single_conditional(specification: paynt.specification.property.Specification, what: str) -> paynt.specification.property.Property:
+    """The conditional property of the specification; raise ValueError unless there is exactly one, which `what` (a noun phrase) needs."""
+    conditionals = [prop for prop in specification.all_properties() if prop.is_conditional]
+    if len(conditionals) != 1:
+        raise ValueError(f"{what} needs exactly one conditional property P[F target || F condition], got {len(conditionals)}")
+    return conditionals[0]
+
+
+def require_plain_sketch_for_conditional(specification: paynt.specification.property.Specification, feature_kind: str) -> None:
+    """Raise NotImplementedError if the specification has a conditional property and the sketch is not a plain one (feature_kind "generic"), the only kind on
+    which AR, one-by-one and SMPMC check them."""
+    if feature_kind != "generic":
+        require_no_conditional(specification, f"synthesis over a {feature_kind!r} sketch", "they are supported for plain sketches only")
 
 
 def require_no_maximizing_reward(specification: paynt.specification.property.Specification) -> None:

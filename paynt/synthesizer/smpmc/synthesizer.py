@@ -58,6 +58,7 @@ class SynthesizerSMPMC(paynt.synthesizer.synthesizer.Synthesizer):
             self._init_forall_parameters()
 
     def _init_forall_parameters(self) -> None:
+        paynt.utils.error_handling.require_no_conditional(self.task.specification, "robust synthesis (--constraint exists_forall)")
         if self.colored_mdp.feature_kind == "family":
             self.colored_mdp, self.forall_parameters = paynt.synthesizer.smpmc._augment.add_policy_parameters(self.colored_mdp)
         parameter_space = self.colored_mdp.parameter_space

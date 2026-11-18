@@ -28,6 +28,7 @@ import paynt.specification.property
 import paynt.model.model
 import paynt.synthesizer.search_node
 import paynt.utils.coloring
+import paynt.utils.conditional
 import paynt.utils.error_handling
 
 import logging
@@ -67,6 +68,8 @@ class ColoredMdp:
         self._state_to_parameters: Any = None
         # see states_without_a_choice
         self._choice_coverage: paynt.utils.coloring.ChoiceCoverage | None = None
+        # see choice_colors
+        self._choice_to_assignment: list[list[tuple[int, int]]] | None = None
 
     @property
     def has_general_coloring(self) -> bool:
@@ -148,17 +151,22 @@ class ColoredMdp:
         state_to_choice = paynt.model.model.ModelIndex.scheduler_to_state_to_choice(self.underlying_mdp, self.choice_destinations, model, scheduler)
         return paynt.model.model.ModelIndex.state_to_choice_to_choices(self.underlying_mdp, state_to_choice)
 
-    def scheduler_selection(self, mdp: Any, scheduler: Any) -> list[list[int]]:
+    def scheduler_selection(self, mdp: Any, scheduler: Any, prop: paynt.specification.property.Property | None = None) -> list[list[int]]:
         """Get parameter options involved in the scheduler selection (the inverse of build(): choices -> V).
 
         For "posmg", unreachable choices are kept rather than discarded (unlike every other feature) since the induced model must still be verified as a game,
         not a plain MDP.
 
         Not available for a general coloring (see has_general_coloring), which has no per-parameter option lists to read back.
+
+        :param prop: the property the scheduler is for; needed if it is a conditional property, whose scheduler has memory (see paynt.utils.conditional)
         """
         paynt.utils.error_handling.require_pair_list_coloring(
             self.coloring, "generic AR and Hybrid (scheduler_selection)", "use --method onebyone, cegis or smpmc"
         )
+        if prop is not None and prop.is_conditional:
+            choices = paynt.utils.conditional.scheduler_choice_mask(self.underlying_mdp, mdp, prop, scheduler)
+            return self.coloring.collectHoleOptions(choices)
         assert scheduler.memoryless and scheduler.deterministic
         discard_unreachable_choices = self.feature_kind != "posmg"
         state_to_choice = paynt.model.model.ModelIndex.scheduler_to_state_to_choice(
@@ -166,6 +174,12 @@ class ColoredMdp:
         )
         choices = paynt.model.model.ModelIndex.state_to_choice_to_choices(self.underlying_mdp, state_to_choice)
         return self.coloring.collectHoleOptions(choices)
+
+    def choice_colors(self) -> list[list[tuple[int, int]]]:
+        """The (parameter, option) pairs of the color of each choice of the underlying MDP (for a pair-list coloring)."""
+        if self._choice_to_assignment is None:
+            self._choice_to_assignment = self.coloring.getChoiceToAssignment()
+        return self._choice_to_assignment
 
     def relevant_parameters(self, parameter_space: paynt.parameter_space.parameter_space.ParameterSpace, states: Any) -> set[int]:
         """The parameters that decide which choices parameter_space selects in the given states of the underlying MDP: with any other parameter set differently,
@@ -237,13 +251,19 @@ class ColoredMdp:
         return consistent, parameter_selection
 
     def scheduler_is_consistent(
-        self, mdp: Any, node: paynt.synthesizer.search_node.SearchNode, result: Any, specification: Any
+        self,
+        mdp: Any,
+        node: paynt.synthesizer.search_node.SearchNode,
+        result: Any,
+        specification: Any,
+        prop: paynt.specification.property.Property | None = None,
     ) -> tuple[list[list[int]], bool]:
         """Get the parameter assignment induced by this scheduler and fill undefined parameters by some option from the parameter space of this mdp.
 
         :param node: the search node currently being verified -- provides parameter_space (the same one mdp was built from); node.scheduler_choices is
             additionally recorded on it for "dt", for the single-property scheduler-preservation shortcut
         :param specification: the specification currently being solved for -- unused except for "dt"
+        :param prop: the property the scheduler is for, see scheduler_selection
         :return: parameter assignment
         :return: whether the scheduler is consistent (i.e. corresponds to exactly one assignment)
         """
@@ -263,7 +283,7 @@ class ColoredMdp:
             return parameter_selection, consistent
 
         # get qualitative scheduler selection, filter inconsistent assignments
-        selection = self.scheduler_selection(mdp, result.get_scheduler())
+        selection = self.scheduler_selection(mdp, result.get_scheduler(), prop)
         inconsistent_assignments = {parameter: options for parameter, options in enumerate(selection) if len(options) > 1}
         scheduler_is_consistent = len(inconsistent_assignments) == 0
         for parameter, options in enumerate(selection):
